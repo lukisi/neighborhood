@@ -1,6 +1,5 @@
 m4/*
-main.c
-proj
+neighborhood.c
 Makefile.in
 Makefile
 *.lo
