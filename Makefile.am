@@ -1,15 +1,20 @@
 NULL = 
 ACLOCAL_AMFLAGS = -I m4
 
+EXTRA_LTLIBRARIES = \
+	libneighborhood.la \
+	$(NULL)
+
 bin_PROGRAMS =  \
-	neighborhood \
+	neighborhoodclient \
 	$(NULL)
 
-neighborhood_SOURCES =  \
-	neighborhood.vala \
+neighborhoodclient_SOURCES =  \
+	main.vala \
+	neighborhood.vapi \
 	$(NULL)
 
-neighborhood_VALAFLAGS = \
+neighborhoodclient_VALAFLAGS = \
 	--pkg gio-2.0 \
 	--pkg gee-0.8 \
 	--pkg tasklet \
@@ -18,7 +23,7 @@ neighborhood_VALAFLAGS = \
 	--pkg linux \
 	$(NULL)
 
-neighborhood_CPPFLAGS = \
+neighborhoodclient_CPPFLAGS = \
 	$(GOBJECT_CFLAGS) \
 	$(GIO_CFLAGS) \
 	$(GEE_CFLAGS) \
@@ -26,7 +31,7 @@ neighborhood_CPPFLAGS = \
 	$(ZCD_CFLAGS) \
 	$(NULL)
 
-neighborhood_LDADD = \
+neighborhoodclient_LDADD = \
 	$(GOBJECT_LIBS) \
 	$(GIO_LIBS) \
 	$(GEE_LIBS) \
@@ -34,5 +39,36 @@ neighborhood_LDADD = \
 	$(ZCD_LIBS) \
 	$(NULL)
 
-BUILT_SOURCES = neighborhood_vala.stamp
+libneighborhood_la_SOURCES = \
+	neighborhood.vala \
+	$(NULL)
+
+libneighborhood_la_VALAFLAGS = \
+	-H neighborhood.h \
+	--library neighborhood \
+	--pkg gio-2.0 \
+	--pkg gee-0.8 \
+	--pkg tasklet \
+	--pkg posix \
+	--pkg zcd \
+	--pkg linux \
+	$(NULL)
+
+libneighborhood_la_CPPFLAGS = \
+	$(GOBJECT_CFLAGS) \
+	$(GIO_CFLAGS) \
+	$(GEE_CFLAGS) \
+	$(TASKLET_CFLAGS) \
+	$(ZCD_CFLAGS) \
+	$(NULL)
+
+libneighborhood_la_LIBADD = \
+	$(GOBJECT_LIBS) \
+	$(GIO_LIBS) \
+	$(GEE_LIBS) \
+	$(TASKLET_LIBS) \
+	$(ZCD_LIBS) \
+	$(NULL)
+
+BUILT_SOURCES = libneighborhood_la_vala.stamp
 

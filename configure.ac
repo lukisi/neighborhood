@@ -8,7 +8,9 @@ AM_SILENT_RULES([yes])
 dnl This avoids dumb '-g -O2' autoconf's default, but won't 
 dnl prevent user from setting a specific value for CFLAGS
 : ${CFLAGS=""}
-AC_PROG_CC
+
+LT_INIT
+AM_PROG_CC_C_O
 
 dnl Check for vala
 AM_PROG_VALAC([0.10.0])
