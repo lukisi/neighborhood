@@ -169,7 +169,7 @@ namespace Netsukuku
             foreach (RealArc arc in arcs) if (arc.my_dev == dev) todel.add(arc);
             foreach (RealArc arc in todel)
             {
-                remove_arc(arc);
+                remove_my_arc(arc);
             }
         }
 
@@ -284,16 +284,16 @@ namespace Netsukuku
             catch (GetRttError e)
             {
                 // remove arc
-                remove_arc(arc);
+                remove_my_arc(arc);
             }
             catch (RPCError e)
             {
                 // remove arc
-                remove_arc(arc);
+                remove_my_arc(arc);
             }
         }
 
-        public void remove_arc(IArc arc)
+        public void remove_my_arc(IArc arc, bool do_not_tell=false)
         {
             if (!(arc is RealArc)) return;
             RealArc _arc = (RealArc)arc;
@@ -301,6 +301,15 @@ namespace Netsukuku
             if (! arcs.contains(_arc)) return;
             // remove the arc
             arcs.remove(_arc);
+            // try and tell the neighbour to do the same
+            if (! do_not_tell)
+            {
+                UnicastID ucid = new UnicastID(arc.mac, arc.neighbour_id);
+                var uc = new AddressManagerNeighbourClient(ucid, {_arc.my_dev}, null, false);
+                try {
+                    uc.neighborhood_manager.remove_arc(my_id, dev_to_mac[_arc.my_dev]);
+                } catch (RPCError e) {}
+            }
             // signal removed arc
             arc_removed(arc);
             // stop monitoring the cost of the arc
@@ -319,6 +328,45 @@ namespace Netsukuku
             );
             foreach (RealArc arc in arcs) if (arc.available) ret.add(arc);
             return ret;
+        }
+
+        /* Get a client to call a unicast remote method
+         */
+        public
+        IAddressManagerRootDispatcher
+        get_unicast(IArc arc, bool wait_reply=true)
+        {
+            if (!(arc is RealArc)) return;
+            RealArc _arc = (RealArc)arc;
+            UnicastID ucid = new UnicastID(_arc.mac, _arc.neighbour_id);
+            var uc = new AddressManagerNeighbourClient(ucid, {_arc.my_dev}, null, wait_reply);
+            return uc;
+        }
+
+        /* Get a client to call a broadcast remote method
+         */
+        public
+        IAddressManagerRootDispatcher
+        get_broadcast(INodeID? ignore_neighbour=null)
+        {
+            var bcid = new BroadcastID(/* TODO ignore_neighbour */);
+            IAddressManagerRootDispatcher ret;
+            foreach (string dev in nics.keys)
+            {
+                var bc = new AddressManagerBroadcastClient(bcid, {dev});
+                if (ret == null) ret = bc;
+                else ret = new CoupleAddressManagerFakeRmt(ret, bc);
+            }
+            return ret;
+        }
+
+        /* Get a client to call a broadcast remote method to one nic
+         */
+        public
+        IAddressManagerRootDispatcher
+        get_broadcast_to_dev(string dev)
+        {
+            return new AddressManagerBroadcastClient(new BroadcastID(), {dev});
         }
 
         /* Remotable methods
@@ -461,6 +509,27 @@ namespace Netsukuku
             // Use the callback saved in the INetworkInterface to prepare to
             // receive the ping.
             nics[my_dev].prepare_ping((uint)guid);
+        }
+
+        public void remove_arc(ISerializable id, string mac,
+                                zcd.CallerInfo? _rpc_caller=null) throws RPCError
+        {
+            assert(_rpc_caller != null);
+            CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
+            if (!(id is INodeID)) throw new RPCError.GENERIC("Not an instance of INodeID");
+            INodeID its_id = (INodeID)id;
+            // The message comes from my_dev and its mac is mac.
+            string my_dev = rpc_caller.dev;
+            // Have I that arc?
+            foreach (RealArc arc in arcs)
+            {
+                if (arc.neighbour_id.equals(its_id) &&
+                    arc.mac == mac &&
+                    arc.my_dev == my_dev)
+                {
+                    remove_my_arc(arc, true);
+                }
+            }
         }
 
         ~NeighborhoodManager()
