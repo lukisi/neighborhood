@@ -1,6 +1,8 @@
 m4/*
 neighborhood.c
 main.c
+neighborhood.h
+neighborhood.vapi
 Makefile.in
 Makefile
 *.lo

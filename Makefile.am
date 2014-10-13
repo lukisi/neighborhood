@@ -20,6 +20,7 @@ neighborhoodclient_VALAFLAGS = \
 	--pkg tasklet \
 	--pkg posix \
 	--pkg zcd \
+	--pkg ntkd-rpc\
 	--pkg linux \
 	$(NULL)
 
@@ -29,6 +30,7 @@ neighborhoodclient_CPPFLAGS = \
 	$(GEE_CFLAGS) \
 	$(TASKLET_CFLAGS) \
 	$(ZCD_CFLAGS) \
+	$(NTKDRPC_CFLAGS) \
 	$(NULL)
 
 neighborhoodclient_LDADD = \
@@ -37,10 +39,13 @@ neighborhoodclient_LDADD = \
 	$(GEE_LIBS) \
 	$(TASKLET_LIBS) \
 	$(ZCD_LIBS) \
+	$(NTKDRPC_LIBS) \
+	$(builddir)/libneighborhood.la \
 	$(NULL)
 
 libneighborhood_la_SOURCES = \
 	neighborhood.vala \
+	extern.vapi \
 	$(NULL)
 
 libneighborhood_la_VALAFLAGS = \
@@ -51,6 +56,7 @@ libneighborhood_la_VALAFLAGS = \
 	--pkg tasklet \
 	--pkg posix \
 	--pkg zcd \
+	--pkg ntkd-rpc\
 	--pkg linux \
 	$(NULL)
 
@@ -60,6 +66,7 @@ libneighborhood_la_CPPFLAGS = \
 	$(GEE_CFLAGS) \
 	$(TASKLET_CFLAGS) \
 	$(ZCD_CFLAGS) \
+	$(NTKDRPC_CFLAGS) \
 	$(NULL)
 
 libneighborhood_la_LIBADD = \
@@ -68,6 +75,15 @@ libneighborhood_la_LIBADD = \
 	$(GEE_LIBS) \
 	$(TASKLET_LIBS) \
 	$(ZCD_LIBS) \
+	$(NTKDRPC_LIBS) \
+	$(NULL)
+
+CLEANFILES = \
+	$(srcdir)/neighborhood.vapi \
+	$(srcdir)/neighborhood.h \
+	$(srcdir)/libneighborhood_la_vala.stamp \
+	$(srcdir)/main.c \
+	$(srcdir)/neighborhood.c \
 	$(NULL)
 
 BUILT_SOURCES = libneighborhood_la_vala.stamp
