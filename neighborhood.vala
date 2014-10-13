@@ -22,10 +22,6 @@ namespace Netsukuku
         public abstract void prepare_ping(uint guid);
     }
 
-    public class REM : Object
-    {
-    }
-
     public interface IArc : Object
     {
         public abstract INodeID neighbour_id {get;}
@@ -40,22 +36,28 @@ namespace Netsukuku
         private string _mac;
         private REM _cost;
         private string _my_dev;
+        public bool available;
 
         public RealArc(INodeID neighbour_id,
-                       REM cost,
                        string mac,
                        string my_dev)
         {
             _neighbour_id = neighbour_id;
             _mac = mac;
-            _cost = cost;
             _my_dev = my_dev;
+            available = true;
         }
 
         public string my_dev {
             get {
                 return _my_dev;
             }
+        }
+
+        public void set_cost(REM cost)
+        {
+            _cost = cost;
+            available = true;
         }
 
         /* Public interface IArc
@@ -90,16 +92,11 @@ namespace Netsukuku
     public class NeighborhoodManager : Object, INeighborhoodManager
     {
         public NeighborhoodManager(INodeID my_id,
-                                   int max_neighbours)
+                                   int max_arcs)
         {
             this.my_id = my_id;
-            this.max_neighbours = max_neighbours;
-            nics = new ArrayList<INetworkInterface>(
-                /*EqualDataFunc*/
-                (a, b) => {
-                    return a.dev == b.dev && a.mac == b.mac;
-                }
-            );
+            this.max_arcs = max_arcs;
+            nics = new HashMap<string, INetworkInterface>();
             monitoring_devs = new HashMap<string, Tasklet>();
             arcs = new ArrayList<RealArc>(
                 /*EqualDataFunc*/
@@ -107,21 +104,42 @@ namespace Netsukuku
                     return a.equals(b);
                 }
             );
+            monitoring_arcs = new HashMap<RealArc, Tasklet>(
+                /*HashDataFunc key_hash_func*/
+                (a) => {
+                    return 1; // all the work to the equal_func
+                },
+                /*EqualDataFunc key_equal_func*/
+                (a, b) => {
+                    return a.equals(b);
+                }
+            );
         }
 
         private INodeID my_id;
-        private int max_neighbours;
-        private ArrayList<INetworkInterface> nics;
+        private int max_arcs;
+        private HashMap<string, INetworkInterface> nics;
         private HashMap<string, Tasklet> monitoring_devs;
         private HashMap<string, string> dev_to_mac;
         private ArrayList<RealArc> arcs;
+        private HashMap<RealArc, Tasklet> monitoring_arcs;
+
+        // Signals:
+        // Network collision detected.
+        public signal void network_collision(INodeID other);
+        // New arc formed.
+        public signal void arc_added(IArc arc);
+        // An arc removed.
+        public signal void arc_removed(IArc arc);
+        // An arc changed its cost.
+        public signal void arc_changed(IArc arc);
 
         public void start_monitor(INetworkInterface nic)
         {
             string dev = nic.dev;
             string mac = nic.mac;
             // is dev or mac already present?
-            foreach (INetworkInterface present in nics)
+            foreach (INetworkInterface present in nics.values)
             {
                 if (present.dev == dev && present.mac == mac) return;
                 assert(present.dev != dev);
@@ -134,27 +152,25 @@ namespace Netsukuku
                 nic);
             monitoring_devs[dev] = t;
             dev_to_mac[dev] = mac;
-            nics.add(nic);
+            nics[dev] = nic;
         }
 
         public void stop_monitor(string dev)
         {
             // search nic
-            INetworkInterface? nic = null;
-            foreach (INetworkInterface present in nics)
-            {
-                if (present.dev == dev)
-                {
-                    nic = present;
-                    break;
-                }
-            }
-            if (nic == null) return;
+            if (! nics.has_key(dev)) return;
             // nic found
             monitoring_devs[dev].abort();
             monitoring_devs.unset(dev);
             dev_to_mac.unset(dev);
-            nics.remove(nic);
+            nics.unset(dev);
+            // remove arcs on this nic
+            ArrayList<RealArc> todel = new ArrayList<RealArc>();
+            foreach (RealArc arc in arcs) if (arc.my_dev == dev) todel.add(arc);
+            foreach (RealArc arc in todel)
+            {
+                remove_arc(arc);
+            }
         }
 
         public bool is_monitoring(string dev)
@@ -169,9 +185,18 @@ namespace Netsukuku
             string dev = nic.dev;
             while (true)
             {
-                AddressManagerBroadcastClient bc = new AddressManagerBroadcastClient(new BroadcastID(), {dev});
-                bc.neighborhood_manager.here_i_am(my_id, nic.mac);
-                print(@"$(dev)\n");
+                try
+                {
+                    AddressManagerBroadcastClient bc =
+                        new AddressManagerBroadcastClient(new BroadcastID(), {dev});
+                    bc.neighborhood_manager.here_i_am(my_id, nic.mac);
+                    print(@"$(dev)\n");
+                }
+                catch (RPCError e)
+                {
+                    log_warn("Neighborhood.monitor_run: " +
+                    @"Error while sending in broadcast to $(dev).");
+                }
                 Tasklet.nap(60, 0);
             }
         }
@@ -186,11 +211,115 @@ namespace Netsukuku
             return my_id.equals((INodeID)ucid.nodeid);
         }
 
-        /*
+        private void start_arc_monitor(RealArc arc)
+        {
+            Tasklet t = Tasklet.tasklet_callback(
+                (t_arc) => {
+                    arc_monitor_run(t_arc as RealArc);
+                },
+                arc);
+            monitoring_arcs[arc] = t;
+        }
+
+        private void stop_arc_monitor(RealArc arc)
+        {
+            if (! monitoring_arcs.has_key(arc)) return;
+            monitoring_arcs[arc].abort();
+            monitoring_arcs.unset(arc);
+        }
+
+        /* Runs in a tasklet foreach arc
          */
-        // public Gee.List<IArc> current_arcs()
-        // {
-        // }
+        private void arc_monitor_run(RealArc arc)
+        {
+            try
+            {
+                INodeID id = arc.neighbour_id;
+                string my_dev = arc.my_dev;
+                string mac = arc.mac;
+                long last_rtt = -1;
+                while (true)
+                {
+                    UnicastID ucid = new UnicastID(mac, id);
+                    // Use a unicast to prepare the neighbor.
+                    // It can throw RPCError.
+                    var uc = new AddressManagerNeighbourClient(ucid, {my_dev});
+                    int guid = Random.int_range(0, 1000000);
+                    uc.neighborhood_manager.expect_ping(guid);
+                    Tasklet.nap(1, 0);
+                    // Use the callback saved in the INetworkInterface to get the
+                    // RTT. It can throw GetRttError.
+                    long rtt = nics[my_dev].get_usec_rtt((uint)guid);
+                    // If all goes right, the arc is still valid and we have the
+                    // cost up-to-date.
+                    if (last_rtt == -1)
+                    {
+                        // First cost measure
+                        last_rtt = rtt;
+                        REM cost = new RTT(last_rtt);
+                        arc.set_cost(cost);
+                        // signal new arc
+                        arc_added(arc);
+                    }
+                    else
+                    {
+                        // Following cost measures
+                        long delta_rtt = rtt - last_rtt;
+                        if (delta_rtt > 0) delta_rtt = delta_rtt / 10;
+                        if (delta_rtt < 0) delta_rtt = delta_rtt / 3;
+                        last_rtt = last_rtt + delta_rtt;
+                        if (last_rtt < (arc.cost as RTT).delay * 0.5 ||
+                            last_rtt > (arc.cost as RTT).delay * 2)
+                        {
+                            REM cost = new RTT(last_rtt);
+                            arc.set_cost(cost);
+                            // signal changed arc
+                            arc_changed(arc);
+                        }
+                    }
+
+                    Tasklet.nap(30, 0);
+                }
+            }
+            catch (GetRttError e)
+            {
+                // remove arc
+                remove_arc(arc);
+            }
+            catch (RPCError e)
+            {
+                // remove arc
+                remove_arc(arc);
+            }
+        }
+
+        public void remove_arc(IArc arc)
+        {
+            if (!(arc is RealArc)) return;
+            RealArc _arc = (RealArc)arc;
+            // do just once
+            if (! arcs.contains(_arc)) return;
+            // remove the arc
+            arcs.remove(_arc);
+            // signal removed arc
+            arc_removed(arc);
+            // stop monitoring the cost of the arc
+            stop_arc_monitor(_arc);
+        }
+
+        /* Expose current valid arcs
+         */
+        public Gee.List<IArc> current_arcs()
+        {
+            var ret = new ArrayList<IArc>(
+                /*EqualDataFunc*/
+                (a, b) => {
+                    return a.equals(b);
+                }
+            );
+            foreach (RealArc arc in arcs) if (arc.available) ret.add(arc);
+            return ret;
+        }
 
         /* Remotable methods
          */
@@ -230,7 +359,13 @@ namespace Netsukuku
             if (! its_id.is_on_same_network(my_id))
             {
                 // It's on different network. Emit signal and ignore message.
-                // TODO signal.
+                network_collision(its_id);
+                return;
+            }
+            // Do I have too many arcs?
+            if (arcs.size >= max_arcs)
+            {
+                // Ignore message.
                 return;
             }
             // We can try and make a new arc.
@@ -254,7 +389,11 @@ namespace Netsukuku
             }
             if (! refused)
             {
-                // TODO
+                // Let's make an arc
+                RealArc new_arc = new RealArc(its_id, mac, my_dev);
+                arcs.add(new_arc);
+                // start periodical ping
+                start_arc_monitor(new_arc);
             }
         }
 
@@ -276,8 +415,8 @@ namespace Netsukuku
                     if (arc.mac == mac && arc.my_dev == my_dev)
                     {
                         // I already made this arc. Confirm arc.
-                        // TODO log_warn("Neighborhood.request_arc: " +
-                        // TODO @"Already got $(mac) on $(dev_to_mac[my_dev])");
+                        log_warn("Neighborhood.request_arc: " +
+                        @"Already got $(mac) on $(dev_to_mac[my_dev])");
                         return;
                     }
                     if (arc.mac == mac || arc.my_dev == my_dev)
@@ -298,13 +437,30 @@ namespace Netsukuku
                 throw new RequestArcError.NOT_SAME_NETWORK(
                 @"Refusing $(mac) because on different network.");
             }
-
-            throw new RequestArcError.GENERIC("Not implemented");
+            // Do I have too many arcs?
+            if (arcs.size >= max_arcs)
+            {
+                // Refuse.
+                throw new RequestArcError.TOO_MANY_ARCS(
+                @"Refusing $(mac) because too many arcs.");
+            }
+            // Let's make an arc
+            RealArc new_arc = new RealArc(its_id, mac, my_dev);
+            arcs.add(new_arc);
+            // start periodical ping
+            start_arc_monitor(new_arc);
         }
 
-        public void expect_ping(int guid)
+        public void expect_ping(int guid,
+                                zcd.CallerInfo? _rpc_caller=null)
         {
-            //prepare_ping((uint)guid);
+            assert(_rpc_caller != null);
+            CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
+            // The message comes from my_dev.
+            string my_dev = rpc_caller.dev;
+            // Use the callback saved in the INetworkInterface to prepare to
+            // receive the ping.
+            nics[my_dev].prepare_ping((uint)guid);
         }
 
         ~NeighborhoodManager()
