@@ -336,7 +336,6 @@ namespace Netsukuku
         IAddressManagerRootDispatcher
         get_unicast(IArc arc, bool wait_reply=true)
         {
-            if (!(arc is RealArc)) return;
             RealArc _arc = (RealArc)arc;
             UnicastID ucid = new UnicastID(_arc.mac, _arc.neighbour_id);
             var uc = new AddressManagerNeighbourClient(ucid, {_arc.my_dev}, null, wait_reply);
@@ -347,17 +346,12 @@ namespace Netsukuku
          */
         public
         IAddressManagerRootDispatcher
-        get_broadcast(INodeID? ignore_neighbour=null)
+        get_broadcast(INodeID? ignore_neighbour=null) throws RPCError
         {
             var bcid = new BroadcastID(/* TODO ignore_neighbour */);
-            IAddressManagerRootDispatcher ret;
-            foreach (string dev in nics.keys)
-            {
-                var bc = new AddressManagerBroadcastClient(bcid, {dev});
-                if (ret == null) ret = bc;
-                else ret = new CoupleAddressManagerFakeRmt(ret, bc);
-            }
-            return ret;
+            if (nics.is_empty) throw new RPCError.GENERIC("No dev managed");
+            var bc = new AddressManagerBroadcastClient(bcid, nics.keys.to_array());
+            return bc;
         }
 
         /* Get a client to call a broadcast remote method to one nic

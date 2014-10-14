@@ -69,8 +69,8 @@ namespace Netsukuku
 
         private string _dev;
         private string _mac;
-        private GetRTT _get_usec_rtt;
-        private PreparePing _prepare_ping;
+        private unowned GetRTT _get_usec_rtt;
+        private unowned PreparePing _prepare_ping;
 
         public string dev
         {
