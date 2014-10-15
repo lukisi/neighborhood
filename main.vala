@@ -13,6 +13,70 @@ namespace Netsukuku
     public void log_error(string msg)     {print(msg);}
     public void log_critical(string msg)     {print(msg);}
 
+    /* Get a client to call a unicast remote method
+     */
+    IAddressManagerRootDispatcher
+    get_unicast(UnicastID ucid, INetworkInterface nic, bool wait_reply)
+    {
+        Nic _nic = (Nic)nic;
+        var uc = new AddressManagerNeighbourClient(ucid, {_nic.dev}, null, wait_reply);
+        return uc;
+    }
+
+    class DelegateContainer : Object
+    {
+        public unowned MissingAckFrom missing;
+    }
+
+    /* Get a client to call a broadcast remote method
+     */
+    IAddressManagerRootDispatcher
+    get_broadcast(BroadcastID bcid,
+                  Gee.Collection<INetworkInterface> nics,
+                  MissingAckFrom missing) throws RPCError
+    {
+        assert(! nics.is_empty);
+        var devs = new ArrayList<string>();
+        foreach (INetworkInterface nic in nics)
+        {
+            Nic _nic = (Nic)nic;
+            devs.add(_nic.dev);
+        }
+        var bc = new AddressManagerBroadcastClient(bcid, devs.to_array(),
+            /*PrepareForAcknowledgements*/
+            () => {
+                Channel ch = new Channel();
+                DelegateContainer cnt = new DelegateContainer();
+                cnt.missing = missing;
+                Tasklet.tasklet_callback(
+                    (t_bcid, t_nics, t_ch, t_cnt) => {
+                        gather_acks((BroadcastID)t_bcid,
+                            (Gee.Collection<INetworkInterface>)t_nics,
+                            (Channel)t_ch,
+                            ((DelegateContainer)t_cnt).missing);
+                    },
+                    bcid, nics, ch, cnt
+                );
+                return ch;
+            }
+        );
+        return bc;
+    }
+
+    /* Gather ACKs from expected receivers of a broadcast message
+     */
+    void
+    gather_acks(BroadcastID bcid,
+                Gee.Collection<INetworkInterface> nics,
+                Channel ch,
+                MissingAckFrom missing)
+    {
+        // TODO prepare a list of expected receivers (in form of IArc).
+        // Wait for the timeout and receive from the channel the list of ACKs.
+        Value v = ch.recv();
+        // TODO prepare a list of 'missing' and foreach launch a tasklet.
+    }
+
     public class MyNodeID : Object, ISerializable, INodeID
     {
         private int id;
@@ -72,6 +136,18 @@ namespace Netsukuku
         private unowned GetRTT _get_usec_rtt;
         private unowned PreparePing _prepare_ping;
 
+        /* Public interface INetworkInterface
+         */
+
+        public bool equals(INetworkInterface other)
+        {
+            // This kind of equality test is ok because main.vala
+            // is the only able to create an instance
+            // of INetworkInterface and it won't create more than one
+            // instance per device at start.
+            return other == this;
+        }
+
         public string dev
         {
             get {
@@ -111,12 +187,21 @@ namespace Netsukuku
                                       out uchar[] data,
                                       out Gee.List<string> devs_response)
     {
-        rpcdispatcher = null;
-        data = null;
-        devs_response = null;
-        UnicastID ucid = (UnicastID)ISerializable.deserialize(payload.ser);
+        UDPServer.ignore_unicast(caller, payload,
+            out rpcdispatcher,
+            out data,
+            out devs_response);
+        UnicastID? ucid = null;
+        try {
+            ucid = (UnicastID)ISerializable.deserialize(payload.ser);
+        } catch (SerializerError e) {return;}
+        INetworkInterface? nic = null;
+        try {
+            nic = address_manager.neighborhood_manager
+                .get_monitoring_interface_from_dev(caller.dev);
+        } catch (RPCError e) {return;}
         if (address_manager.neighborhood_manager
-                .is_unicast_for_me(ucid, caller.dev))
+                .is_unicast_for_me(ucid, nic))
         {
             rpcdispatcher = new AddressManagerDispatcher(address_manager);
             data = payload.data.serialize();
@@ -130,7 +215,13 @@ namespace Netsukuku
                                         out Gee.List<RPCDispatcher> rpcdispatchers,
                                         out uchar[] data)
     {
-        BroadcastID bcid = (BroadcastID)ISerializable.deserialize(payload.ser);
+        UDPServer.ignore_broadcast(caller, payload,
+            out rpcdispatchers,
+            out data);
+        BroadcastID? bcid = null;
+        try {
+            bcid = (BroadcastID)ISerializable.deserialize(payload.ser);
+        } catch (SerializerError e) {return;}
         rpcdispatchers = new ArrayList<RPCDispatcher>();
         rpcdispatchers.add(new AddressManagerDispatcher(address_manager));
         data = payload.data.serialize();
@@ -173,7 +264,7 @@ namespace Netsukuku
 
             // create manager
             address_manager = new AddressManager();
-            address_manager.neighborhood_manager = new NeighborhoodManager(id, 12);
+            address_manager.neighborhood_manager = new NeighborhoodManager(id, 12, get_unicast, get_broadcast);
             // run eth0
             address_manager.neighborhood_manager.start_monitor(nic_eth0);
             Tasklet.nap(5, 0);
