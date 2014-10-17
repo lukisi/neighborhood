@@ -71,10 +71,56 @@ namespace Netsukuku
                 Channel ch,
                 MissingAckFrom missing)
     {
-        // TODO prepare a list of expected receivers (in form of IArc).
+        // prepare a list of expected receivers (in form of IArc).
+        var lst_expected = new ArrayList<IArc>();
+        var cur_arcs = address_manager.neighborhood_manager.current_arcs();
+        foreach (IArc arc in cur_arcs)
+        {
+            // test arc against bcid (e.g. ignore_neighbour)
+            if (arc.neighbour_id.equals(bcid.ignore_nodeid as INodeID)) continue;
+            // test arc against nics.
+            bool is_in_nics = false;
+            foreach (INetworkInterface nic in nics)
+            {
+                if (arc.is_nic(nic))
+                {
+                    is_in_nics = true;
+                    break;
+                }
+            }
+            if (! is_in_nics) continue;
+            // This should receive
+            lst_expected.add(arc);
+        }
         // Wait for the timeout and receive from the channel the list of ACKs.
         Value v = ch.recv();
-        // TODO prepare a list of 'missing' and foreach launch a tasklet.
+        Gee.List<string> responding_macs = (Gee.List<string>)v;
+        // prepare a list of missed arcs.
+        var lst_missed = new ArrayList<IArc>();
+        foreach (IArc expected in lst_expected)
+        {
+            bool has_responded = false;
+            foreach (string responding_mac in responding_macs)
+            {
+                if (expected.mac == responding_mac)
+                {
+                    has_responded = true;
+                    break;
+                }
+            }
+            if (! has_responded) lst_missed.add(expected);
+        }
+        // foreach missed arc launch in a tasklet
+        // the 'missing' callback.
+        foreach (IArc missed in lst_missed)
+        {
+            Tasklet.tasklet_callback(
+                (t_missed) => {
+                    missing((IArc)t_missed);
+                },
+                missed
+            );
+        }
     }
 
     public class MyNodeID : Object, ISerializable, INodeID

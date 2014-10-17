@@ -28,6 +28,7 @@ namespace Netsukuku
         public abstract INodeID neighbour_id {get;}
         public abstract string mac {get;}
         public abstract REM cost {get;}
+        public abstract bool is_nic(INetworkInterface nic);
         public abstract bool equals(IArc other);
     }
 
@@ -36,7 +37,6 @@ namespace Netsukuku
         private INodeID _neighbour_id;
         private string _mac;
         private REM _cost;
-        private string _my_dev;
         private INetworkInterface _my_nic;
         public bool available;
 
@@ -46,15 +46,8 @@ namespace Netsukuku
         {
             _neighbour_id = neighbour_id;
             _mac = mac;
-            _my_dev = my_nic.dev;
             _my_nic = my_nic;
             available = true;
-        }
-
-        public string my_dev {
-            get {
-                return _my_dev;
-            }
         }
 
         public INetworkInterface my_nic {
@@ -71,6 +64,11 @@ namespace Netsukuku
 
         /* Public interface IArc
          */
+
+        public bool is_nic(INetworkInterface nic)
+        {
+            return my_nic.equals(nic);
+        }
 
         public bool equals(IArc other)
         {
@@ -390,7 +388,7 @@ namespace Netsukuku
         get_broadcast(INodeID? ignore_neighbour=null,
                       MissingAckFrom missing) throws RPCError
         {
-            var bcid = new BroadcastID(/* TODO ignore_neighbour */);
+            var bcid = new BroadcastID(ignore_neighbour);
             if (nics.is_empty) throw new RPCError.GENERIC("No NIC managed");
             var bc = callback_broadcast(bcid, nics.values, missing);
             return bc;
