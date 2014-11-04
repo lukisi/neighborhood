@@ -4,14 +4,14 @@ using zcd;
 
 namespace Netsukuku
 {
-    public void log_debug(string msg)     {print(msg);}
-    public void log_trace(string msg)     {print(msg);}
-    public void log_verbose(string msg)     {print(msg);}
-    public void log_info(string msg)     {print(msg);}
-    public void log_notice(string msg)     {print(msg);}
-    public void log_warn(string msg)     {print(msg);}
-    public void log_error(string msg)     {print(msg);}
-    public void log_critical(string msg)     {print(msg);}
+    public void log_debug(string msg)     {print(msg+"\n");}
+    public void log_trace(string msg)     {print(msg+"\n");}
+    public void log_verbose(string msg)     {print(msg+"\n");}
+    public void log_info(string msg)     {print(msg+"\n");}
+    public void log_notice(string msg)     {print(msg+"\n");}
+    public void log_warn(string msg)     {print(msg+"\n");}
+    public void log_error(string msg)     {print(msg+"\n");}
+    public void log_critical(string msg)     {print(msg+"\n");}
 
     /* Get a client to call a unicast remote method
      */
@@ -273,9 +273,10 @@ namespace Netsukuku
         data = payload.data.serialize();
     }
 
-    void main()
+    int main(string[] args)
     {
-        // generate my nodeID
+        string iface = args[1];
+        // generate my nodeID on network 1
         INodeID id = new MyNodeID(1);
         // init tasklet
         assert(Tasklet.init());
@@ -287,15 +288,17 @@ namespace Netsukuku
             // Register more serializable types
             typeof(MyNodeID).class_peek();
 
-            // Handle UDP eth0
-            UDPServer udpserver_eth0 = new UDPServer(udp_unicast_callback, udp_broadcast_callback, "eth0");
-            udpserver_eth0.listen();
-            Nic nic_eth0 = new Nic("eth0", "b8:70:f4:9f:78:9b",
+            // Handle UDP on iface
+            string my_mac = get_mac(iface).up();
+            UDPServer udpserver = new UDPServer(udp_unicast_callback, udp_broadcast_callback, iface);
+            udpserver.listen();
+
+            Nic nic = new Nic(iface, my_mac,
                     /*long GetRTTSecondPart(uint guid)*/
                     (guid) => {
                         try
                         {
-                            return udpserver_eth0.ping(guid);
+                            return udpserver.ping(guid);
                         }
                         catch (Tasklets.ChannelError e)
                         {
@@ -304,23 +307,39 @@ namespace Netsukuku
                     },
                     /*void PreparePing(uint guid)*/
                     (guid) => {
-                        udpserver_eth0.expect_ping(guid);
+                        udpserver.expect_ping(guid);
                     }
             );
 
             // create manager
             address_manager = new AddressManager();
             address_manager.neighborhood_manager = new NeighborhoodManager(id, 12, get_unicast, get_broadcast);
-            // run eth0
-            address_manager.neighborhood_manager.start_monitor(nic_eth0);
-            Tasklet.nap(5, 0);
+            // run monitor
+            address_manager.neighborhood_manager.start_monitor(nic);
+
+            // register handlers for SIGINT and SIGTERM to exit
+            Posix.signal(Posix.SIGINT, safe_exit);
+            Posix.signal(Posix.SIGTERM, safe_exit);
+            // Main loop
+            while (true)
+            {
+                Tasklet.nap(0, 100000);
+                if (do_me_exit) break;
+            }
             // here address_manager.neighborhood_manager will be destroyed
             address_manager = null;
 
-            udpserver_eth0.stop();
+            udpserver.stop();
         }
-        Tasklet.nap(1, 0);
         assert(Tasklet.kill());
+        return 0;
+    }
+
+    bool do_me_exit = false;
+    void safe_exit(int sig)
+    {
+        // We got here because of a signal. Quick processing.
+        do_me_exit = true;
     }
 }
 
