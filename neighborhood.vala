@@ -145,7 +145,7 @@ namespace Netsukuku
         private unowned GetUnicast callback_unicast;
         private unowned GetBroadcast callback_broadcast;
         private IAddressManagerRootDispatcher
-        callback_broadcast_to_nic(BroadcastID bcid, INetworkInterface nic, MissingAckFrom missing)
+        callback_broadcast_to_nic(INetworkInterface nic, MissingAckFrom missing)
         {
             IAddressManagerRootDispatcher bc = null;
             try {
@@ -241,7 +241,7 @@ namespace Netsukuku
                 catch (RPCError e)
                 {
                     log_warn("Neighborhood.monitor_run: " +
-                    @"Error while sending in broadcast to $(nic.mac).");
+                    @"Error '$(e.message)' while sending in broadcast to $(nic.mac).");
                 }
                 Tasklet.nap(60, 0);
             }
@@ -333,7 +333,7 @@ namespace Netsukuku
             }
         }
 
-        public void remove_my_arc(IArc arc, bool do_not_tell=false)
+        public void remove_my_arc(IArc arc, bool do_tell=true)
         {
             if (!(arc is RealArc)) return;
             RealArc _arc = (RealArc)arc;
@@ -342,7 +342,7 @@ namespace Netsukuku
             // remove the arc
             arcs.remove(_arc);
             // try and tell the neighbour to do the same
-            if (! do_not_tell)
+            if (do_tell)
             {
                 var uc = get_unicast(arc, false);
                 try {
@@ -400,8 +400,7 @@ namespace Netsukuku
         IAddressManagerRootDispatcher
         get_broadcast_to_nic(INetworkInterface nic, MissingAckFrom missing)
         {
-            var bcid = new BroadcastID();
-            var bc = callback_broadcast_to_nic(bcid, nic, missing);
+            var bc = callback_broadcast_to_nic(nic, missing);
             return bc;
         }
 
@@ -603,7 +602,7 @@ namespace Netsukuku
                     arc.mac == mac &&
                     arc.my_nic.equals(my_nic))
                 {
-                    remove_my_arc(arc, true);
+                    remove_my_arc(arc, false);
                 }
             }
         }
