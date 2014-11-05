@@ -28,6 +28,39 @@ namespace Netsukuku
         public unowned MissingAckFrom missing;
     }
 
+    class MyAcknowledgementsCommunicator : Object, IAcknowledgementsCommunicator
+    {
+        public BroadcastID bcid;
+        public Gee.Collection<INetworkInterface> nics;
+        public MissingAckFrom missing;
+
+        public MyAcknowledgementsCommunicator(BroadcastID bcid,
+                  Gee.Collection<INetworkInterface> nics,
+                  MissingAckFrom missing)
+        {
+            this.bcid = bcid;
+            this.nics = nics;
+            this.missing = missing;
+        }
+
+        public Channel prepare()
+        {
+            Channel ch = new Channel();
+            DelegateContainer cnt = new DelegateContainer();
+            cnt.missing = missing;
+            Tasklet.tasklet_callback(
+                (t_bcid, t_nics, t_ch, t_cnt) => {
+                    gather_acks((BroadcastID)t_bcid,
+                        (Gee.Collection<INetworkInterface>)t_nics,
+                        (Channel)t_ch,
+                        ((DelegateContainer)t_cnt).missing);
+                },
+                bcid, nics, ch, cnt
+            );
+            return ch;
+        }
+    }
+
     /* Get a client to call a broadcast remote method
      */
     IAddressManagerRootDispatcher
@@ -43,23 +76,7 @@ namespace Netsukuku
             devs.add(_nic.dev);
         }
         var bc = new AddressManagerBroadcastClient(bcid, devs.to_array(),
-            /*PrepareForAcknowledgements*/
-            () => {
-                Channel ch = new Channel();
-                DelegateContainer cnt = new DelegateContainer();
-                cnt.missing = missing;
-                Tasklet.tasklet_callback(
-                    (t_bcid, t_nics, t_ch, t_cnt) => {
-                        gather_acks((BroadcastID)t_bcid,
-                            (Gee.Collection<INetworkInterface>)t_nics,
-                            (Channel)t_ch,
-                            ((DelegateContainer)t_cnt).missing);
-                    },
-                    bcid, nics, ch, cnt
-                );
-                return ch;
-            }
-        );
+            new MyAcknowledgementsCommunicator(bcid, nics, missing));
         return bc;
     }
 
@@ -125,8 +142,8 @@ namespace Netsukuku
 
     public class MyNodeID : Object, ISerializable, INodeID
     {
-        private int id;
-        private int netid;
+        public int id {get; private set;}
+        public int netid {get; private set;}
         public MyNodeID(int netid)
         {
             id = Random.int_range(0, 10000);
@@ -313,7 +330,31 @@ namespace Netsukuku
 
             // create manager
             address_manager = new AddressManager();
+            // create module neighborhood
             address_manager.neighborhood_manager = new NeighborhoodManager(id, 12, get_unicast, get_broadcast);
+            // connect signals
+            address_manager.neighborhood_manager.network_collision.connect(
+                (o) => {
+                    MyNodeID other = o as MyNodeID;
+                    if (other == null) return;
+                    print(@"Collision with netid $(other.netid)\n");
+                }
+            );
+            address_manager.neighborhood_manager.arc_added.connect(
+                (arc) => {
+                    print(@"Added arc with $(arc.mac)\n");
+                }
+            );
+            address_manager.neighborhood_manager.arc_removed.connect(
+                (arc) => {
+                    print(@"Removed arc with $(arc.mac)\n");
+                }
+            );
+            address_manager.neighborhood_manager.arc_changed.connect(
+                (arc) => {
+                    print(@"Changed arc with $(arc.mac)\n");
+                }
+            );
             // run monitor
             address_manager.neighborhood_manager.start_monitor(nic);
 
