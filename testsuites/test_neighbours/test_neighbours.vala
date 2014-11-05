@@ -1,0 +1,306 @@
+using Tasklets;
+using Gee;
+using zcd;
+using Netsukuku;
+
+namespace Netsukuku
+{
+    public void log_debug(string msg)     {print(msg+"\n");}
+    public void log_trace(string msg)     {print(msg+"\n");}
+    public void log_verbose(string msg)     {print(msg+"\n");}
+    public void log_info(string msg)     {print(msg+"\n");}
+    public void log_notice(string msg)     {print(msg+"\n");}
+    public void log_warn(string msg)     {print(msg+"\n");}
+    public void log_error(string msg)     {print(msg+"\n");}
+    public void log_critical(string msg)     {print(msg+"\n");}
+}
+
+public class MyNodeID : Object, ISerializable, INodeID
+{
+    public int id {get; private set;}
+    public int netid {get; private set;}
+    public MyNodeID(int netid)
+    {
+        id = Random.int_range(0, 10000);
+        this.netid = netid;
+    }
+
+    public bool equals(INodeID other)
+    {
+        if (!(other is MyNodeID)) return false;
+        return id == (other as MyNodeID).id;
+    }
+
+    public bool is_on_same_network(INodeID other)
+    {
+        if (!(other is MyNodeID)) return false;
+        return netid == (other as MyNodeID).netid;
+    }
+
+    public Variant serialize_to_variant()
+    {
+        Variant v0 = Serializer.int_to_variant(id);
+        Variant v1 = Serializer.int_to_variant(netid);
+        Variant vret = Serializer.tuple_to_variant(v0, v1);
+        return vret;
+    }
+    public void deserialize_from_variant(Variant v) throws SerializerError
+    {
+        Variant v0;
+        Variant v1;
+        Serializer.variant_to_tuple(v, out v0, out v1);
+        id = Serializer.variant_to_int(v0);
+        netid = Serializer.variant_to_int(v1);
+    }
+}
+
+public class FakeNeighbour : Object
+{
+    // list of neighbours in this testbed.
+    private static ArrayList<FakeNeighbour> _list = null;
+    public static ArrayList<FakeNeighbour> list {
+        get {
+            if (_list == null) _list = new ArrayList<FakeNeighbour>();
+            return _list;
+        }
+    }
+    // constructor
+    public FakeNeighbour()
+    {
+        list.add(this);
+    }
+    // this fake neighbour is reached by my node's nic.
+    public string my_node_nic;
+    // this fake neighbour has this ID.
+    public INodeID neighbour_id;
+    // this fake neighbour has this mac.
+    public string neighbour_mac;
+    // this fake neighbour has this RTT.
+    public long usec_rtt;
+    // guid registered for ping.
+    private HashMap<long, Tasklets.Timer> guids_timeout = null;
+    public void register_guid(long guid)
+    {
+        if (guids_timeout == null) guids_timeout = new HashMap<long, Tasklets.Timer>();
+        guids_timeout[guid] = new Tasklets.Timer(3000);
+    }
+    public bool check_guid(long guid)
+    {
+        if (guids_timeout == null) guids_timeout = new HashMap<long, Tasklets.Timer>();
+        foreach (long k in guids_timeout.keys.to_array())
+        {
+            if (guids_timeout[k].is_expired()) guids_timeout.unset(k);
+            else if (k == guid) return true;
+        }
+        return false;
+    }
+}
+
+public class FakeNic : Object, INetworkInterface
+{
+    public FakeNic(string dev, string mac)
+    {
+        _dev = dev;
+        _mac = mac;
+    }
+
+    private string _dev;
+    private string _mac;
+
+    /* Public interface INetworkInterface
+     */
+
+    public bool equals(INetworkInterface other)
+    {
+        // This kind of equality test is ok because this vala file
+        // is the only able to create an instance
+        // of INetworkInterface and it won't create more than one
+        // instance per device at start.
+        return other == this;
+    }
+
+    public string dev
+    {
+        get {
+            return _dev;
+        }
+    }
+
+    public string mac
+    {
+        get {
+            return _mac;
+        }
+    }
+
+    public long get_usec_rtt(uint guid) throws GetRttError
+    {
+        // check if this guid has been previously registered into some fakenode
+        foreach (FakeNeighbour f in FakeNeighbour.list)
+        {
+            if (f.check_guid(guid)) return f.usec_rtt;
+        }
+        throw new GetRttError.GENERIC("Not reached");
+    }
+
+    public void prepare_ping(uint guid)
+    {
+        // This would register this guid, but nothing to do in this testbed.
+    }
+}
+
+public class FakeBroadcastClient : Object, IAddressManagerRootDispatcher, INeighborhoodManager
+{
+    public BroadcastID bcid;
+    public Gee.Collection<INetworkInterface> nics;
+    public unowned MissingAckFrom missing;
+
+    public FakeBroadcastClient(BroadcastID bcid,
+              Gee.Collection<INetworkInterface> nics,
+              MissingAckFrom missing)
+    {
+            this.bcid = bcid;
+            this.nics = nics;
+            this.missing = missing;
+    }
+
+    public unowned INeighborhoodManager _neighborhood_manager_getter()
+    {
+        return this;
+    }
+    public void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
+    {assert(false);}  // never called in broadcast
+    public void remove_arc (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+    {assert(false);}  // never called in broadcast
+    public void request_arc (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+    {assert(false);}  // never called in broadcast
+	public void here_i_am (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+	{
+	    print("sending broadcast \"here_i_am\" to:");
+	    foreach (INetworkInterface nic in nics) print(@" $(nic.dev)");
+	    print(".\n");
+	}
+}
+
+public class FakeUnicastClient : Object, IAddressManagerRootDispatcher, INeighborhoodManager
+{
+    public UnicastID ucid;
+    public INetworkInterface nic;
+    public bool wait_reply;
+
+    public FakeUnicastClient(UnicastID ucid, INetworkInterface nic, bool wait_reply)
+    {
+            this.ucid = ucid;
+            this.nic = nic;
+            this.wait_reply = wait_reply;
+    }
+
+    public unowned INeighborhoodManager _neighborhood_manager_getter()
+    {
+        return this;
+    }
+    public void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
+    {
+        // TODO
+        print(@"preparing ping to $(ucid.mac)\n");
+    }
+    public void remove_arc (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+    {
+        // TODO
+    }
+    public void request_arc (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+                throws RequestArcError, RPCError
+    {
+        // TODO
+        print(@"requested arc to $(ucid.mac)\n");
+    }
+	public void here_i_am (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+    {assert(false);}  // never called in unicast
+}
+
+/* Get a client to call a unicast remote method
+ */
+IAddressManagerRootDispatcher
+get_unicast(UnicastID ucid, INetworkInterface nic, bool wait_reply)
+{
+    return new FakeUnicastClient(ucid, nic, wait_reply);
+}
+
+/* Get a client to call a broadcast remote method
+ */
+IAddressManagerRootDispatcher
+get_broadcast(BroadcastID bcid,
+              Gee.Collection<INetworkInterface> nics,
+              MissingAckFrom missing) throws RPCError
+{
+    return new FakeBroadcastClient(bcid, nics, missing);
+}
+
+void main()
+{
+    // prepare some neighbour
+    FakeNeighbour n1 = new FakeNeighbour();
+    n1.my_node_nic = "eth1";
+    n1.neighbour_id = new MyNodeID(1);
+    n1.neighbour_mac = "22:22:22:22:22:22";
+    n1.usec_rtt = 1300;
+    n1 = new FakeNeighbour();
+    n1.my_node_nic = "eth1";
+    n1.neighbour_id = new MyNodeID(1);
+    n1.neighbour_mac = "33:33:33:33:33:33";
+    n1.usec_rtt = 20000;
+    // preparation
+    
+
+    string iface = "eth1";
+    string mac = "4E:86:C7:5A:A8:CE";
+    // generate my nodeID on network 1
+    INodeID id = new MyNodeID(1);
+    // init tasklet
+    assert(Tasklet.init());
+    {
+        // create module neighborhood
+        var neighborhood_manager = new NeighborhoodManager(id, 12, get_unicast, get_broadcast);
+        // connect signals
+        neighborhood_manager.network_collision.connect(
+            (o) => {
+                MyNodeID other = o as MyNodeID;
+                if (other == null) return;
+                print(@"Collision with netid $(other.netid)\n");
+            }
+        );
+        neighborhood_manager.arc_added.connect(
+            (arc) => {
+                print(@"Added arc with $(arc.mac)\n");
+            }
+        );
+        neighborhood_manager.arc_removed.connect(
+            (arc) => {
+                print(@"Removed arc with $(arc.mac)\n");
+            }
+        );
+        neighborhood_manager.arc_changed.connect(
+            (arc) => {
+                print(@"Changed arc with $(arc.mac)\n");
+            }
+        );
+        // run monitor
+        neighborhood_manager.start_monitor(new FakeNic(iface, mac));
+        // wait a little, then receive a here_i_am from john
+        Tasklet.nap(0, 200000);
+        FakeNeighbour john = new FakeNeighbour();
+        john.my_node_nic = "eth1";
+        john.neighbour_id = new MyNodeID(1);
+        john.neighbour_mac = "44:44:44:44:44:44";
+        john.usec_rtt = 2000;
+        neighborhood_manager.here_i_am(john.neighbour_id,
+                                       john.neighbour_mac,
+                                       new CallerInfo("john_ip",
+                                                      "john_port",
+                                                      john.my_node_nic));
+        // Stay a while
+        Tasklet.nap(1, 0);
+    }
+    assert(Tasklet.kill());
+}
+

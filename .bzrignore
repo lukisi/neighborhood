@@ -6,6 +6,7 @@ neighborhood.h
 neighborhood.vapi
 Makefile.in
 Makefile
+testsuites/test_neighbours/test_neighbours.c
 *.lo
 *.la
 .deps
@@ -29,5 +30,5 @@ ltmain.sh
 missing
 test-driver
 compile
-Debug
+debug
 finalbuild

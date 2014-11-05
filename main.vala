@@ -32,7 +32,7 @@ namespace Netsukuku
     {
         public BroadcastID bcid;
         public Gee.Collection<INetworkInterface> nics;
-        public MissingAckFrom missing;
+        public unowned MissingAckFrom missing;
 
         public MyAcknowledgementsCommunicator(BroadcastID bcid,
                   Gee.Collection<INetworkInterface> nics,
