@@ -77,6 +77,8 @@ public class FakeNeighbour : Object
     public string neighbour_mac;
     // this fake neighbour has this RTT.
     public long usec_rtt;
+    // this fake neighbour has already an arc with me.
+    public bool has_arc = false;
     // guid registered for ping.
     private HashMap<long, Tasklets.Timer> guids_timeout = null;
     public void register_guid(long guid)
@@ -179,6 +181,26 @@ public class FakeBroadcastClient : Object, IAddressManagerRootDispatcher, INeigh
 	    print("sending broadcast \"here_i_am\" to:");
 	    foreach (INetworkInterface nic in nics) print(@" $(nic.dev)");
 	    print(".\n");
+        foreach (FakeNeighbour f in FakeNeighbour.list)
+        {
+            bool f_has_received = false;
+            foreach (INetworkInterface nic in nics)
+                if (f.my_node_nic == nic.dev)
+                    f_has_received = true;
+            if (f_has_received)
+            {
+                if (! f.has_arc)
+                {
+                    my_node_neighborhood_mgr.request_arc(f.neighbour_id,
+                                                     f.neighbour_mac,
+                                                     new CallerInfo("f_ip",
+                                                                    "f_port",
+                                                                    f.my_node_nic));
+                    f.has_arc = true;
+                }
+                // a periodical ping is not really needed in this testbed
+            }
+        }
 	}
 }
 
@@ -201,8 +223,18 @@ public class FakeUnicastClient : Object, IAddressManagerRootDispatcher, INeighbo
     }
     public void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
     {
-        // TODO
-        print(@"preparing ping to $(ucid.mac)\n");
+        string dest_mac = ucid.mac;
+        INodeID dest_id = ucid.nodeid as INodeID;
+        // find the fakeneighbour
+        foreach (FakeNeighbour f in FakeNeighbour.list)
+        {
+            if (dest_mac == f.neighbour_mac &&
+                dest_id.equals(f.neighbour_id as INodeID))
+            {
+                f.register_guid(guid);
+                break;
+            }
+        }
     }
     public void remove_arc (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
     {
@@ -211,8 +243,9 @@ public class FakeUnicastClient : Object, IAddressManagerRootDispatcher, INeighbo
     public void request_arc (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
                 throws RequestArcError, RPCError
     {
-        // TODO
+        // just accept
         print(@"requested arc to $(ucid.mac)\n");
+        // start a periodical ping, not needed for this testbed
     }
 	public void here_i_am (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
     {assert(false);}  // never called in unicast
@@ -236,21 +269,24 @@ get_broadcast(BroadcastID bcid,
     return new FakeBroadcastClient(bcid, nics, missing);
 }
 
+NeighborhoodManager my_node_neighborhood_mgr;
+
 void main()
 {
-    // prepare some neighbour
-    FakeNeighbour n1 = new FakeNeighbour();
-    n1.my_node_nic = "eth1";
-    n1.neighbour_id = new MyNodeID(1);
-    n1.neighbour_mac = "22:22:22:22:22:22";
-    n1.usec_rtt = 1300;
-    n1 = new FakeNeighbour();
-    n1.my_node_nic = "eth1";
-    n1.neighbour_id = new MyNodeID(1);
-    n1.neighbour_mac = "33:33:33:33:33:33";
-    n1.usec_rtt = 20000;
-    // preparation
-    
+    if (false)
+    {
+        // prepare some neighbour
+        FakeNeighbour n1 = new FakeNeighbour();
+        n1.my_node_nic = "eth1";
+        n1.neighbour_id = new MyNodeID(1);
+        n1.neighbour_mac = "22:22:22:22:22:22";
+        n1.usec_rtt = 1300;
+        n1 = new FakeNeighbour();
+        n1.my_node_nic = "eth1";
+        n1.neighbour_id = new MyNodeID(1);
+        n1.neighbour_mac = "33:33:33:33:33:33";
+        n1.usec_rtt = 20000;
+    }
 
     string iface = "eth1";
     string mac = "4E:86:C7:5A:A8:CE";
@@ -260,46 +296,46 @@ void main()
     assert(Tasklet.init());
     {
         // create module neighborhood
-        var neighborhood_manager = new NeighborhoodManager(id, 12, get_unicast, get_broadcast);
+        my_node_neighborhood_mgr = new NeighborhoodManager(id, 12, get_unicast, get_broadcast);
         // connect signals
-        neighborhood_manager.network_collision.connect(
+        my_node_neighborhood_mgr.network_collision.connect(
             (o) => {
                 MyNodeID other = o as MyNodeID;
                 if (other == null) return;
                 print(@"Collision with netid $(other.netid)\n");
             }
         );
-        neighborhood_manager.arc_added.connect(
+        my_node_neighborhood_mgr.arc_added.connect(
             (arc) => {
                 print(@"Added arc with $(arc.mac)\n");
             }
         );
-        neighborhood_manager.arc_removed.connect(
+        my_node_neighborhood_mgr.arc_removed.connect(
             (arc) => {
                 print(@"Removed arc with $(arc.mac)\n");
             }
         );
-        neighborhood_manager.arc_changed.connect(
+        my_node_neighborhood_mgr.arc_changed.connect(
             (arc) => {
                 print(@"Changed arc with $(arc.mac)\n");
             }
         );
         // run monitor
-        neighborhood_manager.start_monitor(new FakeNic(iface, mac));
+        my_node_neighborhood_mgr.start_monitor(new FakeNic(iface, mac));
         // wait a little, then receive a here_i_am from john
-        Tasklet.nap(0, 200000);
+        Tasklet.nap(2, 0);
         FakeNeighbour john = new FakeNeighbour();
         john.my_node_nic = "eth1";
         john.neighbour_id = new MyNodeID(1);
         john.neighbour_mac = "44:44:44:44:44:44";
         john.usec_rtt = 2000;
-        neighborhood_manager.here_i_am(john.neighbour_id,
+        my_node_neighborhood_mgr.here_i_am(john.neighbour_id,
                                        john.neighbour_mac,
                                        new CallerInfo("john_ip",
                                                       "john_port",
                                                       john.my_node_nic));
         // Stay a while
-        Tasklet.nap(1, 0);
+        Tasklet.nap(3, 0);
     }
     assert(Tasklet.kill());
 }
