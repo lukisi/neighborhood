@@ -94,7 +94,8 @@ namespace Netsukuku
         foreach (IArc arc in cur_arcs)
         {
             // test arc against bcid (e.g. ignore_neighbour)
-            if (arc.neighbour_id.equals(bcid.ignore_nodeid as INodeID)) continue;
+            if (bcid.ignore_nodeid != null)
+                if (arc.neighbour_id.equals(bcid.ignore_nodeid as INodeID)) continue;
             // test arc against nics.
             bool is_in_nics = false;
             foreach (INetworkInterface nic in nics)
@@ -342,7 +343,7 @@ namespace Netsukuku
             );
             address_manager.neighborhood_manager.arc_added.connect(
                 (arc) => {
-                    print(@"Added arc with $(arc.mac)\n");
+                    print(@"Added arc with $(arc.mac), RTT $(arc.cost as RTT)\n");
                 }
             );
             address_manager.neighborhood_manager.arc_removed.connect(
@@ -352,7 +353,7 @@ namespace Netsukuku
             );
             address_manager.neighborhood_manager.arc_changed.connect(
                 (arc) => {
-                    print(@"Changed arc with $(arc.mac)\n");
+                    print(@"Changed arc with $(arc.mac), RTT $(arc.cost as RTT)\n");
                 }
             );
             // run monitor
