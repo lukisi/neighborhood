@@ -1,6 +1,6 @@
 m4/*
 neighborhood.c
-extern.c
+interfaces.c
 main.c
 neighborhood.h
 neighborhood.vapi

@@ -4,34 +4,6 @@ using Tasklets;
 
 namespace Netsukuku
 {
-    public interface INodeID : Object, ISerializable
-    {
-        public abstract bool equals(INodeID other);
-        public abstract bool is_on_same_network(INodeID other);
-    }
-
-    public errordomain GetRttError {
-        GENERIC
-    }
-
-    public interface INetworkInterface : Object
-    {
-        public abstract string dev {get;}
-        public abstract string mac {get;}
-        public abstract long get_usec_rtt(uint guid) throws GetRttError;
-        public abstract void prepare_ping(uint guid);
-        public abstract bool equals(INetworkInterface other);
-    }
-
-    public interface IArc : Object
-    {
-        public abstract INodeID neighbour_id {get;}
-        public abstract string mac {get;}
-        public abstract REM cost {get;}
-        public abstract bool is_nic(INetworkInterface nic);
-        public abstract bool equals(IArc other);
-    }
-
     internal class RealArc : Object, IArc
     {
         private INodeID _neighbour_id;
@@ -96,29 +68,6 @@ namespace Netsukuku
         }
     }
 
-    /* Interface of NeighborhoodManager to be used by who needs to remove arcs,
-     * e.g. instances of IMissingArcHandler.
-     */
-    public interface IArcRemover : Object
-    {
-        public abstract void
-                        i_arc_remover_remove(
-                            IArc arc
-                        );
-    }
-
-    /* Interface to be implemented by who needs to handle the case when a
-     * broadcast message does not reach an arc.
-     */
-    public interface IMissingArcHandler : Object
-    {
-        public abstract void
-                        missing(
-                            IArc arc,
-                            IArcRemover arc_remover
-                        );
-    }
-
     /* Interface of NeighborhoodManager to be used by who needs to gather the,
      * arcs that should be reached by a certain broadcast message.
      */
@@ -128,29 +77,6 @@ namespace Netsukuku
                         current_arcs_for_broadcast(
                             BroadcastID bcid,
                             Gee.Collection<INetworkInterface> nics
-                        );
-    }
-
-    /* Interface of NeighborhoodManager to be used by other modules when they
-     * need to send a message to a neighbor.
-     */
-    public interface IArcToStub : Object
-    {
-        public abstract IAddressManagerRootDispatcher
-                        get_broadcast(
-                            IMissingArcHandler? missing_handler=null,
-                            INodeID? ignore_neighbour=null
-                        );
-        public abstract IAddressManagerRootDispatcher
-                        get_broadcast_to_nic(
-                            INetworkInterface nic,
-                            IMissingArcHandler? missing_handler=null,
-                            INodeID? ignore_neighbour=null
-                        );
-        public abstract IAddressManagerRootDispatcher
-                        get_unicast(
-                            IArc arc,
-                            bool wait_reply=true
                         );
     }
 

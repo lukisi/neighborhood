@@ -85,7 +85,7 @@ neighborhoodclient_LDADD = \
 
 libneighborhood_la_SOURCES = \
 	neighborhood.vala \
-	extern.vala \
+	interfaces.vala \
 	$(NULL)
 
 libneighborhood_la_VALAFLAGS = \
@@ -124,7 +124,7 @@ CLEANFILES = \
 	$(srcdir)/libneighborhood_la_vala.stamp \
 	$(srcdir)/main.c \
 	$(srcdir)/neighborhood.c \
-	$(srcdir)/extern.c \
+	$(srcdir)/interfaces.c \
 	$(srcdir)/testsuites/test_neighbours/test_neighbours.c \
 	$(NULL)
 

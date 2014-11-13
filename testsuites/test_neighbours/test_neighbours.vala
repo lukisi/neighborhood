@@ -290,18 +290,18 @@ void main()
     {
         // prepare some neighbour
         FakeNeighbour n1 = new FakeNeighbour();
-        n1.my_node_nic = "eth1";
+        n1.my_node_nic = "fakeeth1";
         n1.neighbour_id = new MyNodeID(1);
         n1.neighbour_mac = "22:22:22:22:22:22";
         n1.usec_rtt = 1300;
         n1 = new FakeNeighbour();
-        n1.my_node_nic = "eth1";
+        n1.my_node_nic = "fakeeth1";
         n1.neighbour_id = new MyNodeID(1);
         n1.neighbour_mac = "33:33:33:33:33:33";
         n1.usec_rtt = 20000;
     }
 
-    string iface = "eth1";
+    string iface = "fakeeth1";
     string mac = "4E:86:C7:5A:A8:CE";
     // generate my nodeID on network 1
     INodeID id = new MyNodeID(1);
@@ -338,7 +338,7 @@ void main()
         // wait a little, then receive a here_i_am from john
         Tasklet.nap(2, 0);
         FakeNeighbour john = new FakeNeighbour();
-        john.my_node_nic = "eth1";
+        john.my_node_nic = "fakeeth1";
         john.neighbour_id = new MyNodeID(1);
         john.neighbour_mac = "44:44:44:44:44:44";
         john.usec_rtt = 2000;
