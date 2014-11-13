@@ -125,6 +125,7 @@ CLEANFILES = \
 	$(srcdir)/main.c \
 	$(srcdir)/neighborhood.c \
 	$(srcdir)/extern.c \
+	$(srcdir)/testsuites/test_neighbours/test_neighbours.c \
 	$(NULL)
 
 neighborhood.vapi: libneighborhood_la_vala.stamp

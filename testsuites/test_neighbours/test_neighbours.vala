@@ -155,15 +155,21 @@ public class FakeBroadcastClient : Object, IAddressManagerRootDispatcher, INeigh
 {
     public BroadcastID bcid;
     public Gee.Collection<INetworkInterface> nics;
-    public unowned MissingAckFrom missing;
+    public IArcFinder arc_finder;
+    public IArcRemover arc_remover;
+    public IMissingArcHandler missing_handler;
 
     public FakeBroadcastClient(BroadcastID bcid,
-              Gee.Collection<INetworkInterface> nics,
-              MissingAckFrom missing)
+                        Gee.Collection<INetworkInterface> nics,
+                        IArcFinder arc_finder,
+                        IArcRemover arc_remover,
+                        IMissingArcHandler missing_handler)
     {
-            this.bcid = bcid;
-            this.nics = nics;
-            this.missing = missing;
+        this.bcid = bcid;
+        this.nics = nics;
+        this.arc_finder = arc_finder;
+        this.arc_remover = arc_remover;
+        this.missing_handler = missing_handler;
     }
 
     public unowned INeighborhoodManager _neighborhood_manager_getter()
@@ -251,22 +257,29 @@ public class FakeUnicastClient : Object, IAddressManagerRootDispatcher, INeighbo
     {assert(false);}  // never called in unicast
 }
 
-/* Get a client to call a unicast remote method
- */
-IAddressManagerRootDispatcher
-get_unicast(UnicastID ucid, INetworkInterface nic, bool wait_reply)
+public class FakeStubFactory: Object, IStubFactory
 {
-    return new FakeUnicastClient(ucid, nic, wait_reply);
-}
+    public IAddressManagerRootDispatcher
+                    get_broadcast(
+                        BroadcastID bcid,
+                        Gee.Collection<INetworkInterface> nics,
+                        IArcFinder arc_finder,
+                        IArcRemover arc_remover,
+                        IMissingArcHandler missing_handler
+                    )
+    {
+        return new FakeBroadcastClient(bcid, nics, arc_finder, arc_remover, missing_handler);
+    }
 
-/* Get a client to call a broadcast remote method
- */
-IAddressManagerRootDispatcher
-get_broadcast(BroadcastID bcid,
-              Gee.Collection<INetworkInterface> nics,
-              MissingAckFrom missing) throws RPCError
-{
-    return new FakeBroadcastClient(bcid, nics, missing);
+    public IAddressManagerRootDispatcher
+                    get_unicast(
+                        UnicastID ucid,
+                        INetworkInterface nic,
+                        bool wait_reply=true
+                    )
+    {
+        return new FakeUnicastClient(ucid, nic, wait_reply);
+    }
 }
 
 NeighborhoodManager my_node_neighborhood_mgr;
@@ -296,7 +309,7 @@ void main()
     assert(Tasklet.init());
     {
         // create module neighborhood
-        my_node_neighborhood_mgr = new NeighborhoodManager(id, 12, get_unicast, get_broadcast);
+        my_node_neighborhood_mgr = new NeighborhoodManager(id, 12, new FakeStubFactory());
         // connect signals
         my_node_neighborhood_mgr.network_collision.connect(
             (o) => {

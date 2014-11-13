@@ -47,7 +47,7 @@ namespace Netsukuku
             _neighbour_id = neighbour_id;
             _mac = mac;
             _my_nic = my_nic;
-            available = true;
+            available = false;
         }
 
         public INetworkInterface my_nic {
@@ -96,30 +96,117 @@ namespace Netsukuku
         }
     }
 
-    /* Get a client to call a unicast remote method
+    /* Interface of NeighborhoodManager to be used by who needs to remove arcs,
+     * e.g. instances of IMissingArcHandler.
      */
-    public delegate IAddressManagerRootDispatcher
-    GetUnicast(UnicastID ucid, INetworkInterface nic, bool wait_reply=true);
+    public interface IArcRemover : Object
+    {
+        public abstract void
+                        i_arc_remover_remove(
+                            IArc arc
+                        );
+    }
 
-    /* Get a client to call a broadcast remote method
+    /* Interface to be implemented by who needs to handle the case when a
+     * broadcast message does not reach an arc.
      */
-    public delegate void MissingAckFrom(IArc arc);
-    public delegate IAddressManagerRootDispatcher
-    GetBroadcast(BroadcastID bcid,
-                 Gee.Collection<INetworkInterface> nics,
-                 MissingAckFrom missing) throws RPCError;
+    public interface IMissingArcHandler : Object
+    {
+        public abstract void
+                        missing(
+                            IArc arc,
+                            IArcRemover arc_remover
+                        );
+    }
 
-    public class NeighborhoodManager : Object, INeighborhoodManager
+    /* Interface of NeighborhoodManager to be used by who needs to gather the,
+     * arcs that should be reached by a certain broadcast message.
+     */
+    public interface IArcFinder : Object
+    {
+        public abstract Gee.List<IArc>
+                        current_arcs_for_broadcast(
+                            BroadcastID bcid,
+                            Gee.Collection<INetworkInterface> nics
+                        );
+    }
+
+    /* Interface of NeighborhoodManager to be used by other modules when they
+     * need to send a message to a neighbor.
+     */
+    public interface IArcToStub : Object
+    {
+        public abstract IAddressManagerRootDispatcher
+                        get_broadcast(
+                            IMissingArcHandler? missing_handler=null,
+                            INodeID? ignore_neighbour=null
+                        );
+        public abstract IAddressManagerRootDispatcher
+                        get_broadcast_to_nic(
+                            INetworkInterface nic,
+                            IMissingArcHandler? missing_handler=null,
+                            INodeID? ignore_neighbour=null
+                        );
+        public abstract IAddressManagerRootDispatcher
+                        get_unicast(
+                            IArc arc,
+                            bool wait_reply=true
+                        );
+    }
+
+    /* This interface is implemented by an object passed to the Neighbor manager
+     * which uses it to actually obtain a stub to send messages to other nodes.
+     */
+    public interface IStubFactory : Object
+    {
+        public abstract IAddressManagerRootDispatcher
+                        get_broadcast(
+                            BroadcastID bcid,
+                            Gee.Collection<INetworkInterface> nics,
+                            IArcFinder arc_finder,
+                            IArcRemover arc_remover,
+                            IMissingArcHandler missing_handler
+                        );
+        public abstract IAddressManagerRootDispatcher
+                        get_unicast(
+                            UnicastID ucid,
+                            INetworkInterface nic,
+                            bool wait_reply=true
+                        );
+        public  IAddressManagerRootDispatcher
+                get_broadcast_to_nic(
+                    BroadcastID bcid,
+                    INetworkInterface nic,
+                    IArcFinder arc_finder,
+                    IArcRemover arc_remover,
+                    IMissingArcHandler missing_handler
+                )
+        {
+            var _nics = new ArrayList<INetworkInterface>();
+            _nics.add(nic);
+            return get_broadcast(bcid, _nics,
+                        arc_finder, arc_remover, missing_handler);
+        }
+    }
+
+    class IgnoreMissing : Object, IMissingArcHandler
+    {
+        public void missing(IArc arc, IArcRemover arc_remover) {}
+    }
+
+    public class NeighborhoodManager : Object,
+                                       INeighborhoodManager,
+                                       IArcToStub,
+                                       IArcFinder,
+                                       IArcRemover
     {
         public NeighborhoodManager(INodeID my_id,
                                    int max_arcs,
-                                   GetUnicast callback_unicast,
-                                   GetBroadcast callback_broadcast)
+                                   IStubFactory stub_factory)
         {
             this.my_id = my_id;
             this.max_arcs = max_arcs;
-            this.callback_unicast = callback_unicast;
-            this.callback_broadcast = callback_broadcast;
+            this.stub_factory = stub_factory;
             nics = new HashMap<string, INetworkInterface>();
             monitoring_devs = new HashMap<string, Tasklet>();
             arcs = new ArrayList<RealArc>(
@@ -142,19 +229,7 @@ namespace Netsukuku
 
         private INodeID my_id;
         private int max_arcs;
-        private unowned GetUnicast callback_unicast;
-        private unowned GetBroadcast callback_broadcast;
-        private IAddressManagerRootDispatcher
-        callback_broadcast_to_nic(INetworkInterface nic, MissingAckFrom missing)
-        {
-            IAddressManagerRootDispatcher bc = null;
-            try {
-                var _nics = new ArrayList<INetworkInterface>();
-                _nics.add(nic);
-                bc = callback_broadcast(new BroadcastID(), _nics, missing);
-            } catch (RPCError e) {assert(false);}
-            return bc;
-        }
+        private IStubFactory stub_factory;
         private HashMap<string, INetworkInterface> nics;
         private HashMap<string, Tasklet> monitoring_devs;
         private ArrayList<RealArc> arcs;
@@ -230,13 +305,10 @@ namespace Netsukuku
                 try
                 {
                     IAddressManagerRootDispatcher bc =
-                        get_broadcast_to_nic(nic,
+                        get_broadcast_to_nic(nic);
                         // nothing to do for missing ACK from known neighbours
                         // because this message would be not important for them anyway.
-                        (arc) => {}
-                        );
                     bc.neighborhood_manager.here_i_am(my_id, nic.mac);
-                    print(@"$(nic.mac)\n");
                 }
                 catch (RPCError e)
                 {
@@ -333,6 +405,15 @@ namespace Netsukuku
             }
         }
 
+        /* This implements interface IArcRemover; it is usually called as a
+         * consequence of a missed acknowledgement for a broadcast call, so it
+         * will remove its own arc without bothering to tell the other.
+         */
+        public void i_arc_remover_remove(IArc arc)
+        {
+            remove_my_arc(arc, false);
+        }
+
         public void remove_my_arc(IArc arc, bool do_tell=true)
         {
             if (!(arc is RealArc)) return;
@@ -350,7 +431,7 @@ namespace Netsukuku
                 } catch (RPCError e) {}
             }
             // signal removed arc
-            arc_removed(arc);
+            if (_arc.available) arc_removed(arc);
             // stop monitoring the cost of the arc
             stop_arc_monitor(_arc);
         }
@@ -369,6 +450,40 @@ namespace Netsukuku
             return ret;
         }
 
+        /* Implements IArcFinder: current arcs for a given broadcast message
+         */
+        public Gee.List<IArc> current_arcs_for_broadcast(
+                            BroadcastID bcid,
+                            Gee.Collection<INetworkInterface> nics)
+        {
+            var ret = new ArrayList<IArc>(
+                /*EqualDataFunc*/
+                (a, b) => {
+                    return a.equals(b);
+                }
+            );
+            foreach (RealArc arc in arcs) if (arc.available)
+            {
+                // test arc against bcid (e.g. ignore_neighbour)
+                if (bcid.ignore_nodeid != null)
+                    if (arc.neighbour_id.equals(bcid.ignore_nodeid as INodeID)) continue;
+                // test arc against nics.
+                bool is_in_nics = false;
+                foreach (INetworkInterface nic in nics)
+                {
+                    if (arc.is_nic(nic))
+                    {
+                        is_in_nics = true;
+                        break;
+                    }
+                }
+                if (! is_in_nics) continue;
+                // This should receive
+                ret.add(arc);
+            }
+            return ret;
+        }
+
         /* Get a client to call a unicast remote method
          */
         public
@@ -377,7 +492,7 @@ namespace Netsukuku
         {
             RealArc _arc = (RealArc)arc;
             UnicastID ucid = new UnicastID(_arc.mac, _arc.neighbour_id);
-            var uc = callback_unicast(ucid, _arc.my_nic, wait_reply);
+            var uc = stub_factory.get_unicast(ucid, _arc.my_nic, wait_reply);
             return uc;
         }
 
@@ -385,12 +500,17 @@ namespace Netsukuku
          */
         public
         IAddressManagerRootDispatcher
-        get_broadcast(INodeID? ignore_neighbour=null,
-                      MissingAckFrom missing) throws RPCError
+        get_broadcast(IMissingArcHandler? missing_handler=null,
+                      INodeID? ignore_neighbour=null)
         {
+            IMissingArcHandler _missing;
+            if (missing_handler == null) _missing = new IgnoreMissing();
+            else _missing = missing_handler;
             var bcid = new BroadcastID(ignore_neighbour);
-            if (nics.is_empty) throw new RPCError.GENERIC("No NIC managed");
-            var bc = callback_broadcast(bcid, nics.values, missing);
+            var bc = stub_factory.get_broadcast(bcid, nics.values,
+                         /*finder*/ this,
+                         /*remover*/ this,
+                         _missing);
             return bc;
         }
 
@@ -398,9 +518,18 @@ namespace Netsukuku
          */
         public
         IAddressManagerRootDispatcher
-        get_broadcast_to_nic(INetworkInterface nic, MissingAckFrom missing)
+        get_broadcast_to_nic(INetworkInterface nic,
+                             IMissingArcHandler? missing_handler=null,
+                             INodeID? ignore_neighbour=null)
         {
-            var bc = callback_broadcast_to_nic(nic, missing);
+            IMissingArcHandler _missing;
+            if (missing_handler == null) _missing = new IgnoreMissing();
+            else _missing = missing_handler;
+            var bcid = new BroadcastID(ignore_neighbour);
+            var bc = stub_factory.get_broadcast_to_nic(bcid, nic,
+                         /*finder*/ this,
+                         /*remover*/ this,
+                         _missing);
             return bc;
         }
 
@@ -470,7 +599,7 @@ namespace Netsukuku
             //  * INodeID
             //  * mac
             UnicastID ucid = new UnicastID(mac, id);
-            var uc = callback_unicast(ucid, my_nic);
+            var uc = stub_factory.get_unicast(ucid, my_nic);
             bool refused = false;
             bool failed = false;
             try

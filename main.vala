@@ -13,131 +13,121 @@ namespace Netsukuku
     public void log_error(string msg)     {print(msg+"\n");}
     public void log_critical(string msg)     {print(msg+"\n");}
 
-    /* Get a client to call a unicast remote method
+    class MyStubFactory: Object, IStubFactory
+    {
+        public IAddressManagerRootDispatcher
+                        get_broadcast(
+                            BroadcastID bcid,
+                            Gee.Collection<INetworkInterface> nics,
+                            IArcFinder arc_finder,
+                            IArcRemover arc_remover,
+                            IMissingArcHandler missing_handler
+                        )
+        {
+            assert(! nics.is_empty);
+            var devs = new ArrayList<string>();
+            foreach (INetworkInterface nic in nics)
+            {
+                Nic _nic = (Nic)nic;
+                devs.add(_nic.dev);
+            }
+            var bc = new AddressManagerBroadcastClient(bcid, devs.to_array(),
+                new MyAcknowledgementsCommunicator(bcid, nics, arc_finder, arc_remover, missing_handler));
+            return bc;
+        }
+
+        public IAddressManagerRootDispatcher
+                        get_unicast(
+                            UnicastID ucid,
+                            INetworkInterface nic,
+                            bool wait_reply=true
+                        )
+        {
+            Nic _nic = (Nic)nic;
+            var uc = new AddressManagerNeighbourClient(ucid, {_nic.dev}, null, wait_reply);
+            return uc;
+        }
+    }
+
+    /* The instance of this class is created when th stub factory is invoked to
+     * obtain a stub. In theory, the stub could be used for more than one call
+     * and asynchronously, hence the method prepare...
+     * When a remote call is made, immediately the tasklet spawned my the method
+     * 'prepare' will use the arc_finder to get the list.
      */
-    IAddressManagerRootDispatcher
-    get_unicast(UnicastID ucid, INetworkInterface nic, bool wait_reply)
-    {
-        Nic _nic = (Nic)nic;
-        var uc = new AddressManagerNeighbourClient(ucid, {_nic.dev}, null, wait_reply);
-        return uc;
-    }
-
-    class DelegateContainer : Object
-    {
-        public unowned MissingAckFrom missing;
-    }
-
     class MyAcknowledgementsCommunicator : Object, IAcknowledgementsCommunicator
     {
         public BroadcastID bcid;
         public Gee.Collection<INetworkInterface> nics;
-        public unowned MissingAckFrom missing;
+        public IArcFinder arc_finder;
+        public IArcRemover arc_remover;
+        public IMissingArcHandler missing_handler;
 
         public MyAcknowledgementsCommunicator(BroadcastID bcid,
-                  Gee.Collection<INetworkInterface> nics,
-                  MissingAckFrom missing)
+                            Gee.Collection<INetworkInterface> nics,
+                            IArcFinder arc_finder,
+                            IArcRemover arc_remover,
+                            IMissingArcHandler missing_handler)
         {
             this.bcid = bcid;
             this.nics = nics;
-            this.missing = missing;
+            this.arc_finder = arc_finder;
+            this.arc_remover = arc_remover;
+            this.missing_handler = missing_handler;
         }
 
         public Channel prepare()
         {
             Channel ch = new Channel();
-            DelegateContainer cnt = new DelegateContainer();
-            cnt.missing = missing;
             Tasklet.tasklet_callback(
-                (t_bcid, t_nics, t_ch, t_cnt) => {
-                    gather_acks((BroadcastID)t_bcid,
-                        (Gee.Collection<INetworkInterface>)t_nics,
-                        (Channel)t_ch,
-                        ((DelegateContainer)t_cnt).missing);
+                (t_ack_comm, t_ch) => {
+                    MyAcknowledgementsCommunicator ack_comm = (MyAcknowledgementsCommunicator)t_ack_comm;
+                    ack_comm.gather_acks((Channel)t_ch);
                 },
-                bcid, nics, ch, cnt
+                this,
+                ch
             );
             return ch;
         }
-    }
 
-    /* Get a client to call a broadcast remote method
-     */
-    IAddressManagerRootDispatcher
-    get_broadcast(BroadcastID bcid,
-                  Gee.Collection<INetworkInterface> nics,
-                  MissingAckFrom missing) throws RPCError
-    {
-        assert(! nics.is_empty);
-        var devs = new ArrayList<string>();
-        foreach (INetworkInterface nic in nics)
+        /* Gather ACKs from expected receivers of a broadcast message
+         */
+        void
+        gather_acks(Channel ch)
         {
-            Nic _nic = (Nic)nic;
-            devs.add(_nic.dev);
-        }
-        var bc = new AddressManagerBroadcastClient(bcid, devs.to_array(),
-            new MyAcknowledgementsCommunicator(bcid, nics, missing));
-        return bc;
-    }
-
-    /* Gather ACKs from expected receivers of a broadcast message
-     */
-    void
-    gather_acks(BroadcastID bcid,
-                Gee.Collection<INetworkInterface> nics,
-                Channel ch,
-                MissingAckFrom missing)
-    {
-        // prepare a list of expected receivers (in form of IArc).
-        var lst_expected = new ArrayList<IArc>();
-        var cur_arcs = address_manager.neighborhood_manager.current_arcs();
-        foreach (IArc arc in cur_arcs)
-        {
-            // test arc against bcid (e.g. ignore_neighbour)
-            if (bcid.ignore_nodeid != null)
-                if (arc.neighbour_id.equals(bcid.ignore_nodeid as INodeID)) continue;
-            // test arc against nics.
-            bool is_in_nics = false;
-            foreach (INetworkInterface nic in nics)
+            // prepare a list of expected receivers.
+            var lst_expected = arc_finder.current_arcs_for_broadcast(bcid, nics);
+            // Wait for the timeout and receive from the channel the list of ACKs.
+            Value v = ch.recv();
+            Gee.List<string> responding_macs = (Gee.List<string>)v;
+            // prepare a list of missed arcs.
+            var lst_missed = new ArrayList<IArc>();
+            foreach (IArc expected in lst_expected)
             {
-                if (arc.is_nic(nic))
+                bool has_responded = false;
+                foreach (string responding_mac in responding_macs)
                 {
-                    is_in_nics = true;
-                    break;
+                    if (expected.mac == responding_mac)
+                    {
+                        has_responded = true;
+                        break;
+                    }
                 }
+                if (! has_responded) lst_missed.add(expected);
             }
-            if (! is_in_nics) continue;
-            // This should receive
-            lst_expected.add(arc);
-        }
-        // Wait for the timeout and receive from the channel the list of ACKs.
-        Value v = ch.recv();
-        Gee.List<string> responding_macs = (Gee.List<string>)v;
-        // prepare a list of missed arcs.
-        var lst_missed = new ArrayList<IArc>();
-        foreach (IArc expected in lst_expected)
-        {
-            bool has_responded = false;
-            foreach (string responding_mac in responding_macs)
+            // foreach missed arc launch in a tasklet
+            // the 'missing' callback.
+            foreach (IArc missed in lst_missed)
             {
-                if (expected.mac == responding_mac)
-                {
-                    has_responded = true;
-                    break;
-                }
+                Tasklet.tasklet_callback(
+                    (t_ack_comm, t_missed) => {
+                        MyAcknowledgementsCommunicator ack_comm = (MyAcknowledgementsCommunicator)t_ack_comm;
+                        ack_comm.missing_handler.missing((IArc)t_missed, ack_comm.arc_remover);
+                    },
+                    this,
+                    missed
+                );
             }
-            if (! has_responded) lst_missed.add(expected);
-        }
-        // foreach missed arc launch in a tasklet
-        // the 'missing' callback.
-        foreach (IArc missed in lst_missed)
-        {
-            Tasklet.tasklet_callback(
-                (t_missed) => {
-                    missing((IArc)t_missed);
-                },
-                missed
-            );
         }
     }
 
@@ -293,6 +283,8 @@ namespace Netsukuku
 
     int main(string[] args)
     {
+        Time n = Time.local(time_t());
+        print(@"$(n)\n");
         string iface = args[1];
         // generate my nodeID on network 1
         INodeID id = new MyNodeID(1);
@@ -332,32 +324,41 @@ namespace Netsukuku
             // create manager
             address_manager = new AddressManager();
             // create module neighborhood
-            address_manager.neighborhood_manager = new NeighborhoodManager(id, 12, get_unicast, get_broadcast);
+            address_manager.neighborhood_manager = new NeighborhoodManager(id, 12, new MyStubFactory());
             // connect signals
             address_manager.neighborhood_manager.network_collision.connect(
                 (o) => {
                     MyNodeID other = o as MyNodeID;
                     if (other == null) return;
+                    Time m = Time.local(time_t());
+                    print(@"$(m) ");
                     print(@"Collision with netid $(other.netid)\n");
                 }
             );
             address_manager.neighborhood_manager.arc_added.connect(
                 (arc) => {
+                    Time m = Time.local(time_t());
+                    print(@"$(m) ");
                     print(@"Added arc with $(arc.mac), RTT $(arc.cost as RTT)\n");
                 }
             );
             address_manager.neighborhood_manager.arc_removed.connect(
                 (arc) => {
+                    Time m = Time.local(time_t());
+                    print(@"$(m) ");
                     print(@"Removed arc with $(arc.mac)\n");
                 }
             );
             address_manager.neighborhood_manager.arc_changed.connect(
                 (arc) => {
+                    Time m = Time.local(time_t());
+                    print(@"$(m) ");
                     print(@"Changed arc with $(arc.mac), RTT $(arc.cost as RTT)\n");
                 }
             );
             // run monitor
             address_manager.neighborhood_manager.start_monitor(nic);
+            print(@"Monitoring iface $(nic.dev), MAC $(nic.mac)\n");
 
             // register handlers for SIGINT and SIGTERM to exit
             Posix.signal(Posix.SIGINT, safe_exit);
