@@ -4,14 +4,14 @@ using zcd;
 
 namespace Netsukuku
 {
-    public void log_debug(string msg)     {print(msg+"\n");}
-    public void log_trace(string msg)     {print(msg+"\n");}
-    public void log_verbose(string msg)     {print(msg+"\n");}
-    public void log_info(string msg)     {print(msg+"\n");}
-    public void log_notice(string msg)     {print(msg+"\n");}
-    public void log_warn(string msg)     {print(msg+"\n");}
-    public void log_error(string msg)     {print(msg+"\n");}
-    public void log_critical(string msg)     {print(msg+"\n");}
+    public void    log_debug(string msg)   {print(msg+"\n");}
+    public void    log_trace(string msg)   {print(msg+"\n");}
+    public void  log_verbose(string msg)   {print(msg+"\n");}
+    public void     log_info(string msg)   {print(msg+"\n");}
+    public void   log_notice(string msg)   {print(msg+"\n");}
+    public void     log_warn(string msg)   {print(msg+"\n");}
+    public void    log_error(string msg)   {print(msg+"\n");}
+    public void log_critical(string msg)   {print(msg+"\n");}
 
     class MyStubFactory: Object, IStubFactory
     {
@@ -225,13 +225,13 @@ namespace Netsukuku
         }
     }
 
-    public class AddressManager : Object, IAddressManagerRootDispatcher
+    public class AddressManager : FakeAddressManager
     {
         public NeighborhoodManager neighborhood_manager;
-		public unowned INeighborhoodManager _neighborhood_manager_getter()
-		{
-		    return neighborhood_manager;
-		}
+        public override unowned INeighborhoodManager _neighborhood_manager_getter()
+        {
+            return neighborhood_manager;
+        }
     }
     AddressManager? address_manager;
 

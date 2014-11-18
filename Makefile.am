@@ -19,6 +19,7 @@ check_PROGRAMS = \
 
 test_neighbours_SOURCES = \
 	testsuites/test_neighbours/test_neighbours.vala \
+	testsuites/test_neighbours/base_dispatcher.vala \
 	neighborhood.vapi \
 	$(NULL)
 
@@ -51,6 +52,7 @@ test_neighbours_LDADD = \
 
 neighborhoodclient_SOURCES =  \
 	main.vala \
+	base_dispatcher.vala \
 	neighborhood.vapi \
 	$(NULL)
 
@@ -123,9 +125,11 @@ CLEANFILES = \
 	$(srcdir)/neighborhood.h \
 	$(srcdir)/libneighborhood_la_vala.stamp \
 	$(srcdir)/main.c \
+	$(srcdir)/base_dispatcher.c \
 	$(srcdir)/neighborhood.c \
 	$(srcdir)/interfaces.c \
 	$(srcdir)/testsuites/test_neighbours/test_neighbours.c \
+	$(srcdir)/testsuites/test_neighbours/base_dispatcher.c \
 	$(NULL)
 
 neighborhood.vapi: libneighborhood_la_vala.stamp

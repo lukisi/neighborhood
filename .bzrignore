@@ -2,11 +2,13 @@ m4/*
 neighborhood.c
 interfaces.c
 main.c
+base_dispatcher.c
 neighborhood.h
 neighborhood.vapi
 Makefile.in
 Makefile
 testsuites/test_neighbours/test_neighbours.c
+testsuites/test_neighbours/base_dispatcher.c
 *.lo
 *.la
 .deps

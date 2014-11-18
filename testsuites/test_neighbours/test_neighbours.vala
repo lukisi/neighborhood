@@ -5,14 +5,14 @@ using Netsukuku;
 
 namespace Netsukuku
 {
-    public void log_debug(string msg)     {print(msg+"\n");}
-    public void log_trace(string msg)     {print(msg+"\n");}
-    public void log_verbose(string msg)     {print(msg+"\n");}
-    public void log_info(string msg)     {print(msg+"\n");}
-    public void log_notice(string msg)     {print(msg+"\n");}
-    public void log_warn(string msg)     {print(msg+"\n");}
-    public void log_error(string msg)     {print(msg+"\n");}
-    public void log_critical(string msg)     {print(msg+"\n");}
+    public void    log_debug(string msg)   {print(msg+"\n");}
+    public void    log_trace(string msg)   {print(msg+"\n");}
+    public void  log_verbose(string msg)   {print(msg+"\n");}
+    public void     log_info(string msg)   {print(msg+"\n");}
+    public void   log_notice(string msg)   {print(msg+"\n");}
+    public void     log_warn(string msg)   {print(msg+"\n");}
+    public void    log_error(string msg)   {print(msg+"\n");}
+    public void log_critical(string msg)   {print(msg+"\n");}
 }
 
 public class MyNodeID : Object, ISerializable, INodeID
@@ -151,7 +151,7 @@ public class FakeNic : Object, INetworkInterface
     }
 }
 
-public class FakeBroadcastClient : Object, IAddressManagerRootDispatcher, INeighborhoodManager
+public class FakeBroadcastClient : FakeAddressManager
 {
     public BroadcastID bcid;
     public Gee.Collection<INetworkInterface> nics;
@@ -210,7 +210,7 @@ public class FakeBroadcastClient : Object, IAddressManagerRootDispatcher, INeigh
 	}
 }
 
-public class FakeUnicastClient : Object, IAddressManagerRootDispatcher, INeighborhoodManager
+public class FakeUnicastClient : FakeAddressManager
 {
     public UnicastID ucid;
     public INetworkInterface nic;
