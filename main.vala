@@ -131,7 +131,7 @@ namespace Netsukuku
         }
     }
 
-    public class MyNodeID : Object, ISerializable, INodeID
+    public class MyNodeID : Object, ISerializable, INeighborhoodNodeID
     {
         public int id {get; private set;}
         public int netid {get; private set;}
@@ -141,13 +141,13 @@ namespace Netsukuku
             this.netid = netid;
         }
 
-        public bool equals(INodeID other)
+        public bool equals(INeighborhoodNodeID other)
         {
             if (!(other is MyNodeID)) return false;
             return id == (other as MyNodeID).id;
         }
 
-        public bool is_on_same_network(INodeID other)
+        public bool is_on_same_network(INeighborhoodNodeID other)
         {
             if (!(other is MyNodeID)) return false;
             return netid == (other as MyNodeID).netid;
@@ -287,7 +287,7 @@ namespace Netsukuku
         print(@"$(n)\n");
         string iface = args[1];
         // generate my nodeID on network 1
-        INodeID id = new MyNodeID(1);
+        INeighborhoodNodeID id = new MyNodeID(1);
         // init tasklet
         assert(Tasklet.init());
         {

@@ -6,13 +6,13 @@ namespace Netsukuku
 {
     internal class RealArc : Object, IArc
     {
-        private INodeID _neighbour_id;
+        private INeighborhoodNodeID _neighbour_id;
         private string _mac;
         private REM _cost;
         private INetworkInterface _my_nic;
         public bool available;
 
-        public RealArc(INodeID neighbour_id,
+        public RealArc(INeighborhoodNodeID neighbour_id,
                        string mac,
                        INetworkInterface my_nic)
         {
@@ -51,7 +51,7 @@ namespace Netsukuku
             return other == this;
         }
 
-        public INodeID neighbour_id {
+        public INeighborhoodNodeID neighbour_id {
             get {
                 return _neighbour_id;
             }
@@ -126,7 +126,7 @@ namespace Netsukuku
                                        IArcFinder,
                                        IArcRemover
     {
-        public NeighborhoodManager(INodeID my_id,
+        public NeighborhoodManager(INeighborhoodNodeID my_id,
                                    int max_arcs,
                                    IStubFactory stub_factory)
         {
@@ -153,7 +153,7 @@ namespace Netsukuku
             );
         }
 
-        private INodeID my_id;
+        private INeighborhoodNodeID my_id;
         private int max_arcs;
         private IStubFactory stub_factory;
         private HashMap<string, INetworkInterface> nics;
@@ -163,7 +163,7 @@ namespace Netsukuku
 
         // Signals:
         // Network collision detected.
-        public signal void network_collision(INodeID other);
+        public signal void network_collision(INeighborhoodNodeID other);
         // New arc formed.
         public signal void arc_added(IArc arc);
         // An arc removed.
@@ -249,8 +249,8 @@ namespace Netsukuku
         {
             // Is it me?
             if (nic.mac != ucid.mac) return false;
-            if (!(ucid.nodeid is INodeID)) return false;
-            return my_id.equals((INodeID)ucid.nodeid);
+            if (!(ucid.nodeid is INeighborhoodNodeID)) return false;
+            return my_id.equals((INeighborhoodNodeID)ucid.nodeid);
         }
 
         private void start_arc_monitor(RealArc arc)
@@ -392,7 +392,7 @@ namespace Netsukuku
             {
                 // test arc against bcid (e.g. ignore_neighbour)
                 if (bcid.ignore_nodeid != null)
-                    if (arc.neighbour_id.equals(bcid.ignore_nodeid as INodeID)) continue;
+                    if (arc.neighbour_id.equals(bcid.ignore_nodeid as INeighborhoodNodeID)) continue;
                 // test arc against nics.
                 bool is_in_nics = false;
                 foreach (INetworkInterface nic in nics)
@@ -427,7 +427,7 @@ namespace Netsukuku
         public
         IAddressManagerRootDispatcher
         get_broadcast(IMissingArcHandler? missing_handler=null,
-                      INodeID? ignore_neighbour=null)
+                      INeighborhoodNodeID? ignore_neighbour=null)
         {
             IMissingArcHandler _missing;
             if (missing_handler == null) _missing = new IgnoreMissing();
@@ -446,7 +446,7 @@ namespace Netsukuku
         IAddressManagerRootDispatcher
         get_broadcast_to_nic(INetworkInterface nic,
                              IMissingArcHandler? missing_handler=null,
-                             INodeID? ignore_neighbour=null)
+                             INeighborhoodNodeID? ignore_neighbour=null)
         {
             IMissingArcHandler _missing;
             if (missing_handler == null) _missing = new IgnoreMissing();
@@ -462,16 +462,10 @@ namespace Netsukuku
         /* Remotable methods
          */
 
-        public void here_i_am(ISerializable id, string mac, zcd.CallerInfo? _rpc_caller=null)
+        public void here_i_am(INeighborhoodNodeID its_id, string mac, zcd.CallerInfo? _rpc_caller=null)
         {
             assert(_rpc_caller != null);
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
-            if (!(id is INodeID))
-            {
-                log_warn("Neighborhood.here_i_am: Not an instance of INodeID");
-                return;
-            }
-            INodeID its_id = (INodeID)id;
             // This is called in broadcast. Maybe it's me.
             if (its_id.equals(my_id)) return;
             // It's a neighbour. The message comes from my_nic and its mac is mac.
@@ -522,9 +516,9 @@ namespace Netsukuku
             // be elaborated by the neighbor only once, when received through
             // the interface of this arc; hence, UnicastID will contain
             // as an identification:
-            //  * INodeID
+            //  * INeighborhoodNodeID
             //  * mac
-            UnicastID ucid = new UnicastID(mac, id);
+            UnicastID ucid = new UnicastID(mac, its_id);
             var uc = stub_factory.get_unicast(ucid, my_nic);
             bool refused = false;
             bool failed = false;
@@ -552,17 +546,11 @@ namespace Netsukuku
             }
         }
 
-        public void request_arc(ISerializable id, string mac,
+        public void request_arc(INeighborhoodNodeID its_id, string mac,
                                 zcd.CallerInfo? _rpc_caller=null) throws RequestArcError
         {
             assert(_rpc_caller != null);
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
-            if (!(id is INodeID))
-            {
-                log_warn("Neighborhood.request_arc: Not an instance of INodeID");
-                throw new RequestArcError.GENERIC("Not an instance of INodeID");
-            }
-            INodeID its_id = (INodeID)id;
             // The message comes from my_nic and its mac is mac.
             string my_dev = rpc_caller.dev;
             INetworkInterface my_nic = null;
@@ -630,17 +618,11 @@ namespace Netsukuku
             my_nic.prepare_ping((uint)guid);
         }
 
-        public void remove_arc(ISerializable id, string mac,
+        public void remove_arc(INeighborhoodNodeID its_id, string mac,
                                 zcd.CallerInfo? _rpc_caller=null)
         {
             assert(_rpc_caller != null);
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
-            if (!(id is INodeID))
-            {
-                log_warn("Neighborhood.remove_arc: Not an instance of INodeID");
-                return;
-            }
-            INodeID its_id = (INodeID)id;
             // The message comes from my_nic and its mac is mac.
             string my_dev = rpc_caller.dev;
             INetworkInterface my_nic = null;

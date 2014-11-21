@@ -15,7 +15,7 @@ namespace Netsukuku
     public void log_critical(string msg)   {print(msg+"\n");}
 }
 
-public class MyNodeID : Object, ISerializable, INodeID
+public class MyNodeID : Object, ISerializable, INeighborhoodNodeID
 {
     public int id {get; private set;}
     public int netid {get; private set;}
@@ -25,13 +25,13 @@ public class MyNodeID : Object, ISerializable, INodeID
         this.netid = netid;
     }
 
-    public bool equals(INodeID other)
+    public bool equals(INeighborhoodNodeID other)
     {
         if (!(other is MyNodeID)) return false;
         return id == (other as MyNodeID).id;
     }
 
-    public bool is_on_same_network(INodeID other)
+    public bool is_on_same_network(INeighborhoodNodeID other)
     {
         if (!(other is MyNodeID)) return false;
         return netid == (other as MyNodeID).netid;
@@ -72,7 +72,7 @@ public class FakeNeighbour : Object
     // this fake neighbour is reached by my node's nic.
     public string my_node_nic;
     // this fake neighbour has this ID.
-    public INodeID neighbour_id;
+    public INeighborhoodNodeID neighbour_id;
     // this fake neighbour has this mac.
     public string neighbour_mac;
     // this fake neighbour has this RTT.
@@ -172,17 +172,17 @@ public class FakeBroadcastClient : FakeAddressManager
         this.missing_handler = missing_handler;
     }
 
-    public unowned INeighborhoodManager _neighborhood_manager_getter()
+    public override unowned INeighborhoodManager _neighborhood_manager_getter()
     {
         return this;
     }
-    public void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
+    public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
     {assert(false);}  // never called in broadcast
-    public void remove_arc (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+    public override void remove_arc (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
     {assert(false);}  // never called in broadcast
-    public void request_arc (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+    public override void request_arc (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
     {assert(false);}  // never called in broadcast
-	public void here_i_am (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+	public override void here_i_am (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
 	{
 	    print("sending broadcast \"here_i_am\" to:");
 	    foreach (INetworkInterface nic in nics) print(@" $(nic.dev)");
@@ -223,37 +223,37 @@ public class FakeUnicastClient : FakeAddressManager
             this.wait_reply = wait_reply;
     }
 
-    public unowned INeighborhoodManager _neighborhood_manager_getter()
+    public override unowned INeighborhoodManager _neighborhood_manager_getter()
     {
         return this;
     }
-    public void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
+    public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
     {
         string dest_mac = ucid.mac;
-        INodeID dest_id = ucid.nodeid as INodeID;
+        INeighborhoodNodeID dest_id = ucid.nodeid as INeighborhoodNodeID;
         // find the fakeneighbour
         foreach (FakeNeighbour f in FakeNeighbour.list)
         {
             if (dest_mac == f.neighbour_mac &&
-                dest_id.equals(f.neighbour_id as INodeID))
+                dest_id.equals(f.neighbour_id as INeighborhoodNodeID))
             {
                 f.register_guid(guid);
                 break;
             }
         }
     }
-    public void remove_arc (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+    public override void remove_arc (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
     {
         // TODO
     }
-    public void request_arc (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+    public override void request_arc (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
                 throws RequestArcError, RPCError
     {
         // just accept
         print(@"requested arc to $(ucid.mac)\n");
         // start a periodical ping, not needed for this testbed
     }
-	public void here_i_am (ISerializable my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+	public override void here_i_am (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
     {assert(false);}  // never called in unicast
 }
 
@@ -304,7 +304,7 @@ void main()
     string iface = "fakeeth1";
     string mac = "4E:86:C7:5A:A8:CE";
     // generate my nodeID on network 1
-    INodeID id = new MyNodeID(1);
+    INeighborhoodNodeID id = new MyNodeID(1);
     // init tasklet
     assert(Tasklet.init());
     {
