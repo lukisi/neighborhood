@@ -13,23 +13,23 @@ namespace Netsukuku
     public void    log_error(string msg)   {print(msg+"\n");}
     public void log_critical(string msg)   {print(msg+"\n");}
 
-    class MyStubFactory: Object, IStubFactory
+    class MyStubFactory: Object, INeighborhoodStubFactory
     {
         public IAddressManagerRootDispatcher
-                        get_broadcast(
+                        i_neighborhood_get_broadcast(
                             BroadcastID bcid,
-                            Gee.Collection<INetworkInterface> nics,
-                            IArcFinder arc_finder,
-                            IArcRemover arc_remover,
-                            IMissingArcHandler missing_handler
+                            Gee.Collection<INeighborhoodNetworkInterface> nics,
+                            INeighborhoodArcFinder arc_finder,
+                            INeighborhoodArcRemover arc_remover,
+                            INeighborhoodMissingArcHandler missing_handler
                         )
         {
             assert(! nics.is_empty);
             var devs = new ArrayList<string>();
-            foreach (INetworkInterface nic in nics)
+            foreach (INeighborhoodNetworkInterface nic in nics)
             {
                 Nic _nic = (Nic)nic;
-                devs.add(_nic.dev);
+                devs.add(_nic.i_neighborhood_dev);
             }
             var bc = new AddressManagerBroadcastClient(bcid, devs.to_array(),
                 new MyAcknowledgementsCommunicator(bcid, nics, arc_finder, arc_remover, missing_handler));
@@ -37,14 +37,14 @@ namespace Netsukuku
         }
 
         public IAddressManagerRootDispatcher
-                        get_unicast(
+                        i_neighborhood_get_unicast(
                             UnicastID ucid,
-                            INetworkInterface nic,
+                            INeighborhoodNetworkInterface nic,
                             bool wait_reply=true
                         )
         {
             Nic _nic = (Nic)nic;
-            var uc = new AddressManagerNeighbourClient(ucid, {_nic.dev}, null, wait_reply);
+            var uc = new AddressManagerNeighbourClient(ucid, {_nic.i_neighborhood_dev}, null, wait_reply);
             return uc;
         }
     }
@@ -58,16 +58,16 @@ namespace Netsukuku
     class MyAcknowledgementsCommunicator : Object, IAcknowledgementsCommunicator
     {
         public BroadcastID bcid;
-        public Gee.Collection<INetworkInterface> nics;
-        public IArcFinder arc_finder;
-        public IArcRemover arc_remover;
-        public IMissingArcHandler missing_handler;
+        public Gee.Collection<INeighborhoodNetworkInterface> nics;
+        public INeighborhoodArcFinder arc_finder;
+        public INeighborhoodArcRemover arc_remover;
+        public INeighborhoodMissingArcHandler missing_handler;
 
         public MyAcknowledgementsCommunicator(BroadcastID bcid,
-                            Gee.Collection<INetworkInterface> nics,
-                            IArcFinder arc_finder,
-                            IArcRemover arc_remover,
-                            IMissingArcHandler missing_handler)
+                            Gee.Collection<INeighborhoodNetworkInterface> nics,
+                            INeighborhoodArcFinder arc_finder,
+                            INeighborhoodArcRemover arc_remover,
+                            INeighborhoodMissingArcHandler missing_handler)
         {
             this.bcid = bcid;
             this.nics = nics;
@@ -96,18 +96,18 @@ namespace Netsukuku
         gather_acks(Channel ch)
         {
             // prepare a list of expected receivers.
-            var lst_expected = arc_finder.current_arcs_for_broadcast(bcid, nics);
+            var lst_expected = arc_finder.i_neighborhood_current_arcs_for_broadcast(bcid, nics);
             // Wait for the timeout and receive from the channel the list of ACKs.
             Value v = ch.recv();
             Gee.List<string> responding_macs = (Gee.List<string>)v;
             // prepare a list of missed arcs.
-            var lst_missed = new ArrayList<IArc>();
-            foreach (IArc expected in lst_expected)
+            var lst_missed = new ArrayList<INeighborhoodArc>();
+            foreach (INeighborhoodArc expected in lst_expected)
             {
                 bool has_responded = false;
                 foreach (string responding_mac in responding_macs)
                 {
-                    if (expected.mac == responding_mac)
+                    if (expected.i_neighborhood_mac == responding_mac)
                     {
                         has_responded = true;
                         break;
@@ -117,12 +117,12 @@ namespace Netsukuku
             }
             // foreach missed arc launch in a tasklet
             // the 'missing' callback.
-            foreach (IArc missed in lst_missed)
+            foreach (INeighborhoodArc missed in lst_missed)
             {
                 Tasklet.tasklet_callback(
                     (t_ack_comm, t_missed) => {
                         MyAcknowledgementsCommunicator ack_comm = (MyAcknowledgementsCommunicator)t_ack_comm;
-                        ack_comm.missing_handler.missing((IArc)t_missed, ack_comm.arc_remover);
+                        ack_comm.missing_handler.i_neighborhood_missing((INeighborhoodArc)t_missed, ack_comm.arc_remover);
                     },
                     this,
                     missed
@@ -141,13 +141,13 @@ namespace Netsukuku
             this.netid = netid;
         }
 
-        public bool equals(INeighborhoodNodeID other)
+        public bool i_neighborhood_equals(INeighborhoodNodeID other)
         {
             if (!(other is MyNodeID)) return false;
             return id == (other as MyNodeID).id;
         }
 
-        public bool is_on_same_network(INeighborhoodNodeID other)
+        public bool i_neighborhood_is_on_same_network(INeighborhoodNodeID other)
         {
             if (!(other is MyNodeID)) return false;
             return netid == (other as MyNodeID).netid;
@@ -172,7 +172,7 @@ namespace Netsukuku
 
     public delegate long GetRTT(uint guid) throws GetRttError;
     public delegate void PreparePing(uint guid);
-    public class Nic : Object, INetworkInterface
+    public class Nic : Object, INeighborhoodNetworkInterface
     {
         public Nic(string dev,
                    string mac,
@@ -193,7 +193,7 @@ namespace Netsukuku
         /* Public interface INetworkInterface
          */
 
-        public bool equals(INetworkInterface other)
+        public bool i_neighborhood_equals(INeighborhoodNetworkInterface other)
         {
             // This kind of equality test is ok because main.vala
             // is the only able to create an instance
@@ -202,24 +202,24 @@ namespace Netsukuku
             return other == this;
         }
 
-        public string dev
+        public string i_neighborhood_dev
         {
             get {
                 return _dev;
             }
         }
-        public string mac
+        public string i_neighborhood_mac
         {
             get {
                 return _mac;
             }
         }
-        public long get_usec_rtt(uint guid) throws GetRttError
+        public long i_neighborhood_get_usec_rtt(uint guid) throws GetRttError
         {
             return _get_usec_rtt(guid);
         }
 
-        public void prepare_ping(uint guid)
+        public void i_neighborhood_prepare_ping(uint guid)
         {
             _prepare_ping(guid);
         }
@@ -249,7 +249,7 @@ namespace Netsukuku
         try {
             ucid = (UnicastID)ISerializable.deserialize(payload.ser);
         } catch (SerializerError e) {return;}
-        INetworkInterface? nic = null;
+        INeighborhoodNetworkInterface? nic = null;
         try {
             nic = address_manager.neighborhood_manager
                 .get_monitoring_interface_from_dev(caller.dev);
@@ -339,26 +339,26 @@ namespace Netsukuku
                 (arc) => {
                     Time m = Time.local(time_t());
                     print(@"$(m) ");
-                    print(@"Added arc with $(arc.mac), RTT $(arc.cost as RTT)\n");
+                    print(@"Added arc with $(arc.i_neighborhood_mac), RTT $(arc.i_neighborhood_cost as RTT)\n");
                 }
             );
             address_manager.neighborhood_manager.arc_removed.connect(
                 (arc) => {
                     Time m = Time.local(time_t());
                     print(@"$(m) ");
-                    print(@"Removed arc with $(arc.mac)\n");
+                    print(@"Removed arc with $(arc.i_neighborhood_mac)\n");
                 }
             );
             address_manager.neighborhood_manager.arc_changed.connect(
                 (arc) => {
                     Time m = Time.local(time_t());
                     print(@"$(m) ");
-                    print(@"Changed arc with $(arc.mac), RTT $(arc.cost as RTT)\n");
+                    print(@"Changed arc with $(arc.i_neighborhood_mac), RTT $(arc.i_neighborhood_cost as RTT)\n");
                 }
             );
             // run monitor
             address_manager.neighborhood_manager.start_monitor(nic);
-            print(@"Monitoring iface $(nic.dev), MAC $(nic.mac)\n");
+            print(@"Monitoring iface $(nic.i_neighborhood_dev), MAC $(nic.i_neighborhood_mac)\n");
 
             // register handlers for SIGINT and SIGTERM to exit
             Posix.signal(Posix.SIGINT, safe_exit);

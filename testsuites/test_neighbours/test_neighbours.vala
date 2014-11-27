@@ -25,13 +25,13 @@ public class MyNodeID : Object, ISerializable, INeighborhoodNodeID
         this.netid = netid;
     }
 
-    public bool equals(INeighborhoodNodeID other)
+    public bool i_neighborhood_equals(INeighborhoodNodeID other)
     {
         if (!(other is MyNodeID)) return false;
         return id == (other as MyNodeID).id;
     }
 
-    public bool is_on_same_network(INeighborhoodNodeID other)
+    public bool i_neighborhood_is_on_same_network(INeighborhoodNodeID other)
     {
         if (!(other is MyNodeID)) return false;
         return netid == (other as MyNodeID).netid;
@@ -98,7 +98,7 @@ public class FakeNeighbour : Object
     }
 }
 
-public class FakeNic : Object, INetworkInterface
+public class FakeNic : Object, INeighborhoodNetworkInterface
 {
     public FakeNic(string dev, string mac)
     {
@@ -109,33 +109,33 @@ public class FakeNic : Object, INetworkInterface
     private string _dev;
     private string _mac;
 
-    /* Public interface INetworkInterface
+    /* Public interface INeighborhoodNetworkInterface
      */
 
-    public bool equals(INetworkInterface other)
+    public bool i_neighborhood_equals(INeighborhoodNetworkInterface other)
     {
         // This kind of equality test is ok because this vala file
         // is the only able to create an instance
-        // of INetworkInterface and it won't create more than one
+        // of INeighborhoodNetworkInterface and it won't create more than one
         // instance per device at start.
         return other == this;
     }
 
-    public string dev
+    public string i_neighborhood_dev
     {
         get {
             return _dev;
         }
     }
 
-    public string mac
+    public string i_neighborhood_mac
     {
         get {
             return _mac;
         }
     }
 
-    public long get_usec_rtt(uint guid) throws GetRttError
+    public long i_neighborhood_get_usec_rtt(uint guid) throws GetRttError
     {
         // check if this guid has been previously registered into some fakenode
         foreach (FakeNeighbour f in FakeNeighbour.list)
@@ -145,7 +145,7 @@ public class FakeNic : Object, INetworkInterface
         throw new GetRttError.GENERIC("Not reached");
     }
 
-    public void prepare_ping(uint guid)
+    public void i_neighborhood_prepare_ping(uint guid)
     {
         // This would register this guid, but nothing to do in this testbed.
     }
@@ -154,16 +154,16 @@ public class FakeNic : Object, INetworkInterface
 public class FakeBroadcastClient : FakeAddressManager
 {
     public BroadcastID bcid;
-    public Gee.Collection<INetworkInterface> nics;
-    public IArcFinder arc_finder;
-    public IArcRemover arc_remover;
-    public IMissingArcHandler missing_handler;
+    public Gee.Collection<INeighborhoodNetworkInterface> nics;
+    public INeighborhoodArcFinder arc_finder;
+    public INeighborhoodArcRemover arc_remover;
+    public INeighborhoodMissingArcHandler missing_handler;
 
     public FakeBroadcastClient(BroadcastID bcid,
-                        Gee.Collection<INetworkInterface> nics,
-                        IArcFinder arc_finder,
-                        IArcRemover arc_remover,
-                        IMissingArcHandler missing_handler)
+                        Gee.Collection<INeighborhoodNetworkInterface> nics,
+                        INeighborhoodArcFinder arc_finder,
+                        INeighborhoodArcRemover arc_remover,
+                        INeighborhoodMissingArcHandler missing_handler)
     {
         this.bcid = bcid;
         this.nics = nics;
@@ -185,13 +185,13 @@ public class FakeBroadcastClient : FakeAddressManager
 	public override void here_i_am (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
 	{
 	    print("sending broadcast \"here_i_am\" to:");
-	    foreach (INetworkInterface nic in nics) print(@" $(nic.dev)");
+	    foreach (INeighborhoodNetworkInterface nic in nics) print(@" $(nic.i_neighborhood_dev)");
 	    print(".\n");
         foreach (FakeNeighbour f in FakeNeighbour.list)
         {
             bool f_has_received = false;
-            foreach (INetworkInterface nic in nics)
-                if (f.my_node_nic == nic.dev)
+            foreach (INeighborhoodNetworkInterface nic in nics)
+                if (f.my_node_nic == nic.i_neighborhood_dev)
                     f_has_received = true;
             if (f_has_received)
             {
@@ -213,10 +213,10 @@ public class FakeBroadcastClient : FakeAddressManager
 public class FakeUnicastClient : FakeAddressManager
 {
     public UnicastID ucid;
-    public INetworkInterface nic;
+    public INeighborhoodNetworkInterface nic;
     public bool wait_reply;
 
-    public FakeUnicastClient(UnicastID ucid, INetworkInterface nic, bool wait_reply)
+    public FakeUnicastClient(UnicastID ucid, INeighborhoodNetworkInterface nic, bool wait_reply)
     {
             this.ucid = ucid;
             this.nic = nic;
@@ -235,7 +235,7 @@ public class FakeUnicastClient : FakeAddressManager
         foreach (FakeNeighbour f in FakeNeighbour.list)
         {
             if (dest_mac == f.neighbour_mac &&
-                dest_id.equals(f.neighbour_id as INeighborhoodNodeID))
+                dest_id.i_neighborhood_equals(f.neighbour_id as INeighborhoodNodeID))
             {
                 f.register_guid(guid);
                 break;
@@ -257,24 +257,24 @@ public class FakeUnicastClient : FakeAddressManager
     {assert(false);}  // never called in unicast
 }
 
-public class FakeStubFactory: Object, IStubFactory
+public class FakeStubFactory: Object, INeighborhoodStubFactory
 {
     public IAddressManagerRootDispatcher
-                    get_broadcast(
+                    i_neighborhood_get_broadcast(
                         BroadcastID bcid,
-                        Gee.Collection<INetworkInterface> nics,
-                        IArcFinder arc_finder,
-                        IArcRemover arc_remover,
-                        IMissingArcHandler missing_handler
+                        Gee.Collection<INeighborhoodNetworkInterface> nics,
+                        INeighborhoodArcFinder arc_finder,
+                        INeighborhoodArcRemover arc_remover,
+                        INeighborhoodMissingArcHandler missing_handler
                     )
     {
         return new FakeBroadcastClient(bcid, nics, arc_finder, arc_remover, missing_handler);
     }
 
     public IAddressManagerRootDispatcher
-                    get_unicast(
+                    i_neighborhood_get_unicast(
                         UnicastID ucid,
-                        INetworkInterface nic,
+                        INeighborhoodNetworkInterface nic,
                         bool wait_reply=true
                     )
     {
@@ -320,17 +320,17 @@ void main()
         );
         my_node_neighborhood_mgr.arc_added.connect(
             (arc) => {
-                print(@"Added arc with $(arc.mac)\n");
+                print(@"Added arc with $(arc.i_neighborhood_mac)\n");
             }
         );
         my_node_neighborhood_mgr.arc_removed.connect(
             (arc) => {
-                print(@"Removed arc with $(arc.mac)\n");
+                print(@"Removed arc with $(arc.i_neighborhood_mac)\n");
             }
         );
         my_node_neighborhood_mgr.arc_changed.connect(
             (arc) => {
-                print(@"Changed arc with $(arc.mac)\n");
+                print(@"Changed arc with $(arc.i_neighborhood_mac)\n");
             }
         );
         // run monitor

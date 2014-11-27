@@ -4,17 +4,17 @@ using Tasklets;
 
 namespace Netsukuku
 {
-    internal class RealArc : Object, IArc
+    internal class NeighborhoodRealArc : Object, INeighborhoodArc
     {
         private INeighborhoodNodeID _neighbour_id;
         private string _mac;
         private REM _cost;
-        private INetworkInterface _my_nic;
+        private INeighborhoodNetworkInterface _my_nic;
         public bool available;
 
-        public RealArc(INeighborhoodNodeID neighbour_id,
+        public NeighborhoodRealArc(INeighborhoodNodeID neighbour_id,
                        string mac,
-                       INetworkInterface my_nic)
+                       INeighborhoodNetworkInterface my_nic)
         {
             _neighbour_id = neighbour_id;
             _mac = mac;
@@ -22,7 +22,7 @@ namespace Netsukuku
             available = false;
         }
 
-        public INetworkInterface my_nic {
+        public INeighborhoodNetworkInterface my_nic {
             get {
                 return _my_nic;
             }
@@ -37,12 +37,12 @@ namespace Netsukuku
         /* Public interface IArc
          */
 
-        public bool is_nic(INetworkInterface nic)
+        public bool i_neighborhood_is_nic(INeighborhoodNetworkInterface nic)
         {
-            return my_nic.equals(nic);
+            return my_nic.i_neighborhood_equals(nic);
         }
 
-        public bool equals(IArc other)
+        public bool i_neighborhood_equals(INeighborhoodArc other)
         {
             // This kind of equality test is ok as long as I am sure
             // that this module is the only able to create an instance
@@ -51,17 +51,17 @@ namespace Netsukuku
             return other == this;
         }
 
-        public INeighborhoodNodeID neighbour_id {
+        public INeighborhoodNodeID i_neighborhood_neighbour_id {
             get {
                 return _neighbour_id;
             }
         }
-        public string mac {
+        public string i_neighborhood_mac {
             get {
                 return _mac;
             }
         }
-        public REM cost {
+        public REM i_neighborhood_cost {
             get {
                 return _cost;
             }
@@ -71,120 +71,120 @@ namespace Netsukuku
     /* Interface of NeighborhoodManager to be used by who needs to gather the,
      * arcs that should be reached by a certain broadcast message.
      */
-    public interface IArcFinder : Object
+    public interface INeighborhoodArcFinder : Object
     {
-        public abstract Gee.List<IArc>
-                        current_arcs_for_broadcast(
+        public abstract Gee.List<INeighborhoodArc>
+                        i_neighborhood_current_arcs_for_broadcast(
                             BroadcastID bcid,
-                            Gee.Collection<INetworkInterface> nics
+                            Gee.Collection<INeighborhoodNetworkInterface> nics
                         );
     }
 
     /* This interface is implemented by an object passed to the Neighbor manager
      * which uses it to actually obtain a stub to send messages to other nodes.
      */
-    public interface IStubFactory : Object
+    public interface INeighborhoodStubFactory : Object
     {
         public abstract IAddressManagerRootDispatcher
-                        get_broadcast(
+                        i_neighborhood_get_broadcast(
                             BroadcastID bcid,
-                            Gee.Collection<INetworkInterface> nics,
-                            IArcFinder arc_finder,
-                            IArcRemover arc_remover,
-                            IMissingArcHandler missing_handler
+                            Gee.Collection<INeighborhoodNetworkInterface> nics,
+                            INeighborhoodArcFinder arc_finder,
+                            INeighborhoodArcRemover arc_remover,
+                            INeighborhoodMissingArcHandler missing_handler
                         );
         public abstract IAddressManagerRootDispatcher
-                        get_unicast(
+                        i_neighborhood_get_unicast(
                             UnicastID ucid,
-                            INetworkInterface nic,
+                            INeighborhoodNetworkInterface nic,
                             bool wait_reply=true
                         );
         public  IAddressManagerRootDispatcher
-                get_broadcast_to_nic(
+                i_neighborhood_get_broadcast_to_nic(
                     BroadcastID bcid,
-                    INetworkInterface nic,
-                    IArcFinder arc_finder,
-                    IArcRemover arc_remover,
-                    IMissingArcHandler missing_handler
+                    INeighborhoodNetworkInterface nic,
+                    INeighborhoodArcFinder arc_finder,
+                    INeighborhoodArcRemover arc_remover,
+                    INeighborhoodMissingArcHandler missing_handler
                 )
         {
-            var _nics = new ArrayList<INetworkInterface>();
+            var _nics = new ArrayList<INeighborhoodNetworkInterface>();
             _nics.add(nic);
-            return get_broadcast(bcid, _nics,
+            return i_neighborhood_get_broadcast(bcid, _nics,
                         arc_finder, arc_remover, missing_handler);
         }
     }
 
-    class IgnoreMissing : Object, IMissingArcHandler
+    class NeighborhoodIgnoreMissing : Object, INeighborhoodMissingArcHandler
     {
-        public void missing(IArc arc, IArcRemover arc_remover) {}
+        public void i_neighborhood_missing(INeighborhoodArc arc, INeighborhoodArcRemover arc_remover) {}
     }
 
     public class NeighborhoodManager : Object,
                                        INeighborhoodManager,
-                                       IArcToStub,
-                                       IArcFinder,
-                                       IArcRemover
+                                       INeighborhoodArcToStub,
+                                       INeighborhoodArcFinder,
+                                       INeighborhoodArcRemover
     {
         public NeighborhoodManager(INeighborhoodNodeID my_id,
                                    int max_arcs,
-                                   IStubFactory stub_factory)
+                                   INeighborhoodStubFactory stub_factory)
         {
             this.my_id = my_id;
             this.max_arcs = max_arcs;
             this.stub_factory = stub_factory;
-            nics = new HashMap<string, INetworkInterface>();
+            nics = new HashMap<string, INeighborhoodNetworkInterface>();
             monitoring_devs = new HashMap<string, Tasklet>();
-            arcs = new ArrayList<RealArc>(
+            arcs = new ArrayList<NeighborhoodRealArc>(
                 /*EqualDataFunc*/
                 (a, b) => {
-                    return a.equals(b);
+                    return a.i_neighborhood_equals(b);
                 }
             );
-            monitoring_arcs = new HashMap<RealArc, Tasklet>(
+            monitoring_arcs = new HashMap<NeighborhoodRealArc, Tasklet>(
                 /*HashDataFunc key_hash_func*/
                 (a) => {
                     return 1; // all the work to the equal_func
                 },
                 /*EqualDataFunc key_equal_func*/
                 (a, b) => {
-                    return a.equals(b);
+                    return a.i_neighborhood_equals(b);
                 }
             );
         }
 
         private INeighborhoodNodeID my_id;
         private int max_arcs;
-        private IStubFactory stub_factory;
-        private HashMap<string, INetworkInterface> nics;
+        private INeighborhoodStubFactory stub_factory;
+        private HashMap<string, INeighborhoodNetworkInterface> nics;
         private HashMap<string, Tasklet> monitoring_devs;
-        private ArrayList<RealArc> arcs;
-        private HashMap<RealArc, Tasklet> monitoring_arcs;
+        private ArrayList<NeighborhoodRealArc> arcs;
+        private HashMap<NeighborhoodRealArc, Tasklet> monitoring_arcs;
 
         // Signals:
         // Network collision detected.
         public signal void network_collision(INeighborhoodNodeID other);
         // New arc formed.
-        public signal void arc_added(IArc arc);
+        public signal void arc_added(INeighborhoodArc arc);
         // An arc removed.
-        public signal void arc_removed(IArc arc);
+        public signal void arc_removed(INeighborhoodArc arc);
         // An arc changed its cost.
-        public signal void arc_changed(IArc arc);
+        public signal void arc_changed(INeighborhoodArc arc);
 
-        public void start_monitor(INetworkInterface nic)
+        public void start_monitor(INeighborhoodNetworkInterface nic)
         {
-            string dev = nic.dev;
-            string mac = nic.mac;
+            string dev = nic.i_neighborhood_dev;
+            string mac = nic.i_neighborhood_mac;
             // is dev or mac already present?
-            foreach (INetworkInterface present in nics.values)
+            foreach (INeighborhoodNetworkInterface present in nics.values)
             {
-                if (present.dev == dev && present.mac == mac) return;
-                assert(present.dev != dev);
-                assert(present.mac != mac);
+                if (present.i_neighborhood_dev == dev && present.i_neighborhood_mac == mac) return;
+                assert(present.i_neighborhood_dev != dev);
+                assert(present.i_neighborhood_mac != mac);
             }
             Tasklet t = Tasklet.tasklet_callback(
                 (t_nic) => {
-                    monitor_run(t_nic as INetworkInterface);
+                    monitor_run(t_nic as INeighborhoodNetworkInterface);
                 },
                 nic);
             monitoring_devs[dev] = t;
@@ -196,11 +196,11 @@ namespace Netsukuku
             // search nic
             if (! nics.has_key(dev)) return;
             // nic found
-            INetworkInterface nic = nics[dev];
+            INeighborhoodNetworkInterface nic = nics[dev];
             // remove arcs on this nic
-            ArrayList<RealArc> todel = new ArrayList<RealArc>();
-            foreach (RealArc arc in arcs) if (arc.my_nic.equals(nic)) todel.add(arc);
-            foreach (RealArc arc in todel)
+            ArrayList<NeighborhoodRealArc> todel = new ArrayList<NeighborhoodRealArc>();
+            foreach (NeighborhoodRealArc arc in arcs) if (arc.my_nic.i_neighborhood_equals(nic)) todel.add(arc);
+            foreach (NeighborhoodRealArc arc in todel)
             {
                 remove_my_arc(arc);
             }
@@ -215,7 +215,7 @@ namespace Netsukuku
             return monitoring_devs.has_key(dev);
         }
 
-        public INetworkInterface get_monitoring_interface_from_dev(string dev)
+        public INeighborhoodNetworkInterface get_monitoring_interface_from_dev(string dev)
         throws RPCError
         {
             if (is_monitoring(dev)) return nics[dev];
@@ -224,46 +224,46 @@ namespace Netsukuku
 
         /* Runs in a tasklet foreach device
          */
-        private void monitor_run(INetworkInterface nic)
+        private void monitor_run(INeighborhoodNetworkInterface nic)
         {
             while (true)
             {
                 try
                 {
                     IAddressManagerRootDispatcher bc =
-                        get_broadcast_to_nic(nic);
+                        i_neighborhood_get_broadcast_to_nic(nic);
                         // nothing to do for missing ACK from known neighbours
                         // because this message would be not important for them anyway.
-                    bc.neighborhood_manager.here_i_am(my_id, nic.mac);
+                    bc.neighborhood_manager.here_i_am(my_id, nic.i_neighborhood_mac);
                 }
                 catch (RPCError e)
                 {
                     log_warn("Neighborhood.monitor_run: " +
-                    @"Error '$(e.message)' while sending in broadcast to $(nic.mac).");
+                    @"Error '$(e.message)' while sending in broadcast to $(nic.i_neighborhood_mac).");
                 }
                 Tasklet.nap(60, 0);
             }
         }
 
-        public bool is_unicast_for_me(UnicastID ucid, INetworkInterface nic)
+        public bool is_unicast_for_me(UnicastID ucid, INeighborhoodNetworkInterface nic)
         {
             // Is it me?
-            if (nic.mac != ucid.mac) return false;
+            if (nic.i_neighborhood_mac != ucid.mac) return false;
             if (!(ucid.nodeid is INeighborhoodNodeID)) return false;
-            return my_id.equals((INeighborhoodNodeID)ucid.nodeid);
+            return my_id.i_neighborhood_equals((INeighborhoodNodeID)ucid.nodeid);
         }
 
-        private void start_arc_monitor(RealArc arc)
+        private void start_arc_monitor(NeighborhoodRealArc arc)
         {
             Tasklet t = Tasklet.tasklet_callback(
                 (t_arc) => {
-                    arc_monitor_run(t_arc as RealArc);
+                    arc_monitor_run(t_arc as NeighborhoodRealArc);
                 },
                 arc);
             monitoring_arcs[arc] = t;
         }
 
-        private void stop_arc_monitor(RealArc arc)
+        private void stop_arc_monitor(NeighborhoodRealArc arc)
         {
             if (! monitoring_arcs.has_key(arc)) return;
             monitoring_arcs[arc].abort();
@@ -272,7 +272,7 @@ namespace Netsukuku
 
         /* Runs in a tasklet foreach arc
          */
-        private void arc_monitor_run(RealArc arc)
+        private void arc_monitor_run(NeighborhoodRealArc arc)
         {
             try
             {
@@ -281,13 +281,13 @@ namespace Netsukuku
                 {
                     // Use a unicast to prepare the neighbor.
                     // It can throw RPCError.
-                    var uc = get_unicast(arc);
+                    var uc = i_neighborhood_get_unicast(arc);
                     int guid = Random.int_range(0, 1000000);
                     uc.neighborhood_manager.expect_ping(guid);
                     Tasklet.nap(1, 0);
                     // Use the callback saved in the INetworkInterface to get the
                     // RTT. It can throw GetRttError.
-                    long rtt = arc.my_nic.get_usec_rtt((uint)guid);
+                    long rtt = arc.my_nic.i_neighborhood_get_usec_rtt((uint)guid);
                     // If all goes right, the arc is still valid and we have the
                     // cost up-to-date.
                     if (last_rtt == -1)
@@ -306,8 +306,8 @@ namespace Netsukuku
                         if (delta_rtt > 0) delta_rtt = delta_rtt / 10;
                         if (delta_rtt < 0) delta_rtt = delta_rtt / 3;
                         last_rtt = last_rtt + delta_rtt;
-                        if (last_rtt < (arc.cost as RTT).delay * 0.5 ||
-                            last_rtt > (arc.cost as RTT).delay * 2)
+                        if (last_rtt < (arc.i_neighborhood_cost as RTT).delay * 0.5 ||
+                            last_rtt > (arc.i_neighborhood_cost as RTT).delay * 2)
                         {
                             REM cost = new RTT(last_rtt);
                             arc.set_cost(cost);
@@ -335,15 +335,15 @@ namespace Netsukuku
          * consequence of a missed acknowledgement for a broadcast call, so it
          * will remove its own arc without bothering to tell the other.
          */
-        public void i_arc_remover_remove(IArc arc)
+        public void i_neighborhood_arc_remover_remove(INeighborhoodArc arc)
         {
             remove_my_arc(arc, false);
         }
 
-        public void remove_my_arc(IArc arc, bool do_tell=true)
+        public void remove_my_arc(INeighborhoodArc arc, bool do_tell=true)
         {
-            if (!(arc is RealArc)) return;
-            RealArc _arc = (RealArc)arc;
+            if (!(arc is NeighborhoodRealArc)) return;
+            NeighborhoodRealArc _arc = (NeighborhoodRealArc)arc;
             // do just once
             if (! arcs.contains(_arc)) return;
             // remove the arc
@@ -351,9 +351,9 @@ namespace Netsukuku
             // try and tell the neighbour to do the same
             if (do_tell)
             {
-                var uc = get_unicast(arc, false);
+                var uc = i_neighborhood_get_unicast(arc, false);
                 try {
-                    uc.neighborhood_manager.remove_arc(my_id, _arc.my_nic.mac);
+                    uc.neighborhood_manager.remove_arc(my_id, _arc.my_nic.i_neighborhood_mac);
                 } catch (RPCError e) {}
             }
             // signal removed arc
@@ -364,40 +364,40 @@ namespace Netsukuku
 
         /* Expose current valid arcs
          */
-        public Gee.List<IArc> current_arcs()
+        public Gee.List<INeighborhoodArc> current_arcs()
         {
-            var ret = new ArrayList<IArc>(
+            var ret = new ArrayList<INeighborhoodArc>(
                 /*EqualDataFunc*/
                 (a, b) => {
-                    return a.equals(b);
+                    return a.i_neighborhood_equals(b);
                 }
             );
-            foreach (RealArc arc in arcs) if (arc.available) ret.add(arc);
+            foreach (NeighborhoodRealArc arc in arcs) if (arc.available) ret.add(arc);
             return ret;
         }
 
         /* Implements IArcFinder: current arcs for a given broadcast message
          */
-        public Gee.List<IArc> current_arcs_for_broadcast(
+        public Gee.List<INeighborhoodArc> i_neighborhood_current_arcs_for_broadcast(
                             BroadcastID bcid,
-                            Gee.Collection<INetworkInterface> nics)
+                            Gee.Collection<INeighborhoodNetworkInterface> nics)
         {
-            var ret = new ArrayList<IArc>(
+            var ret = new ArrayList<INeighborhoodArc>(
                 /*EqualDataFunc*/
                 (a, b) => {
-                    return a.equals(b);
+                    return a.i_neighborhood_equals(b);
                 }
             );
-            foreach (RealArc arc in arcs) if (arc.available)
+            foreach (NeighborhoodRealArc arc in arcs) if (arc.available)
             {
                 // test arc against bcid (e.g. ignore_neighbour)
                 if (bcid.ignore_nodeid != null)
-                    if (arc.neighbour_id.equals(bcid.ignore_nodeid as INeighborhoodNodeID)) continue;
+                    if (arc.i_neighborhood_neighbour_id.i_neighborhood_equals(bcid.ignore_nodeid as INeighborhoodNodeID)) continue;
                 // test arc against nics.
                 bool is_in_nics = false;
-                foreach (INetworkInterface nic in nics)
+                foreach (INeighborhoodNetworkInterface nic in nics)
                 {
-                    if (arc.is_nic(nic))
+                    if (arc.i_neighborhood_is_nic(nic))
                     {
                         is_in_nics = true;
                         break;
@@ -414,11 +414,11 @@ namespace Netsukuku
          */
         public
         IAddressManagerRootDispatcher
-        get_unicast(IArc arc, bool wait_reply=true)
+        i_neighborhood_get_unicast(INeighborhoodArc arc, bool wait_reply=true)
         {
-            RealArc _arc = (RealArc)arc;
-            UnicastID ucid = new UnicastID(_arc.mac, _arc.neighbour_id);
-            var uc = stub_factory.get_unicast(ucid, _arc.my_nic, wait_reply);
+            NeighborhoodRealArc _arc = (NeighborhoodRealArc)arc;
+            UnicastID ucid = new UnicastID(_arc.i_neighborhood_mac, _arc.i_neighborhood_neighbour_id);
+            var uc = stub_factory.i_neighborhood_get_unicast(ucid, _arc.my_nic, wait_reply);
             return uc;
         }
 
@@ -426,14 +426,14 @@ namespace Netsukuku
          */
         public
         IAddressManagerRootDispatcher
-        get_broadcast(IMissingArcHandler? missing_handler=null,
+        i_neighborhood_get_broadcast(INeighborhoodMissingArcHandler? missing_handler=null,
                       INeighborhoodNodeID? ignore_neighbour=null)
         {
-            IMissingArcHandler _missing;
-            if (missing_handler == null) _missing = new IgnoreMissing();
+            INeighborhoodMissingArcHandler _missing;
+            if (missing_handler == null) _missing = new NeighborhoodIgnoreMissing();
             else _missing = missing_handler;
             var bcid = new BroadcastID(ignore_neighbour);
-            var bc = stub_factory.get_broadcast(bcid, nics.values,
+            var bc = stub_factory.i_neighborhood_get_broadcast(bcid, nics.values,
                          /*finder*/ this,
                          /*remover*/ this,
                          _missing);
@@ -444,15 +444,15 @@ namespace Netsukuku
          */
         public
         IAddressManagerRootDispatcher
-        get_broadcast_to_nic(INetworkInterface nic,
-                             IMissingArcHandler? missing_handler=null,
+        i_neighborhood_get_broadcast_to_nic(INeighborhoodNetworkInterface nic,
+                             INeighborhoodMissingArcHandler? missing_handler=null,
                              INeighborhoodNodeID? ignore_neighbour=null)
         {
-            IMissingArcHandler _missing;
-            if (missing_handler == null) _missing = new IgnoreMissing();
+            INeighborhoodMissingArcHandler _missing;
+            if (missing_handler == null) _missing = new NeighborhoodIgnoreMissing();
             else _missing = missing_handler;
             var bcid = new BroadcastID(ignore_neighbour);
-            var bc = stub_factory.get_broadcast_to_nic(bcid, nic,
+            var bc = stub_factory.i_neighborhood_get_broadcast_to_nic(bcid, nic,
                          /*finder*/ this,
                          /*remover*/ this,
                          _missing);
@@ -467,10 +467,10 @@ namespace Netsukuku
             assert(_rpc_caller != null);
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
             // This is called in broadcast. Maybe it's me.
-            if (its_id.equals(my_id)) return;
+            if (its_id.i_neighborhood_equals(my_id)) return;
             // It's a neighbour. The message comes from my_nic and its mac is mac.
             string my_dev = rpc_caller.dev;
-            INetworkInterface my_nic = null;
+            INeighborhoodNetworkInterface my_nic = null;
             try {
                 my_nic = get_monitoring_interface_from_dev(my_dev);
             } catch (RPCError e) {
@@ -478,17 +478,17 @@ namespace Netsukuku
                 return;
             }
             // Did I already meet it? Did I already make an arc?
-            foreach (RealArc arc in arcs)
+            foreach (NeighborhoodRealArc arc in arcs)
             {
-                if (arc.neighbour_id.equals(its_id))
+                if (arc.i_neighborhood_neighbour_id.i_neighborhood_equals(its_id))
                 {
                     // I already met him. Same MAC and same NIC?
-                    if (arc.mac == mac && arc.my_nic.equals(my_nic))
+                    if (arc.i_neighborhood_mac == mac && arc.my_nic.i_neighborhood_equals(my_nic))
                     {
                         // I already made this arc. Ignore this message.
                         return;
                     }
-                    if (arc.mac == mac || arc.my_nic.equals(my_nic))
+                    if (arc.i_neighborhood_mac == mac || arc.my_nic.i_neighborhood_equals(my_nic))
                     {
                         // Not willing to make a new arc on same collision
                         // domain. Ignore this message.
@@ -499,7 +499,7 @@ namespace Netsukuku
                 }
             }
             // Is it on my network?
-            if (! its_id.is_on_same_network(my_id))
+            if (! its_id.i_neighborhood_is_on_same_network(my_id))
             {
                 // It's on different network. Emit signal and ignore message.
                 network_collision(its_id);
@@ -519,12 +519,12 @@ namespace Netsukuku
             //  * INeighborhoodNodeID
             //  * mac
             UnicastID ucid = new UnicastID(mac, its_id);
-            var uc = stub_factory.get_unicast(ucid, my_nic);
+            var uc = stub_factory.i_neighborhood_get_unicast(ucid, my_nic);
             bool refused = false;
             bool failed = false;
             try
             {
-                uc.neighborhood_manager.request_arc(my_id, my_nic.mac);
+                uc.neighborhood_manager.request_arc(my_id, my_nic.i_neighborhood_mac);
             }
             catch (RequestArcError e)
             {
@@ -539,7 +539,7 @@ namespace Netsukuku
             if (! (refused || failed))
             {
                 // Let's make an arc
-                RealArc new_arc = new RealArc(its_id, mac, my_nic);
+                NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, mac, my_nic);
                 arcs.add(new_arc);
                 // start periodical ping
                 start_arc_monitor(new_arc);
@@ -553,7 +553,7 @@ namespace Netsukuku
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
             // The message comes from my_nic and its mac is mac.
             string my_dev = rpc_caller.dev;
-            INetworkInterface my_nic = null;
+            INeighborhoodNetworkInterface my_nic = null;
             try {
                 my_nic = get_monitoring_interface_from_dev(my_dev);
             } catch (RPCError e) {
@@ -561,31 +561,31 @@ namespace Netsukuku
                 throw new RequestArcError.GENERIC(e.message);
             }
             // Did I already make an arc?
-            foreach (RealArc arc in arcs)
+            foreach (NeighborhoodRealArc arc in arcs)
             {
-                if (arc.neighbour_id.equals(its_id))
+                if (arc.i_neighborhood_neighbour_id.i_neighborhood_equals(its_id))
                 {
                     // I already met him. Same MAC and same NIC?
-                    if (arc.mac == mac && arc.my_nic.equals(my_nic))
+                    if (arc.i_neighborhood_mac == mac && arc.my_nic.i_neighborhood_equals(my_nic))
                     {
                         // I already made this arc. Confirm arc.
                         log_warn("Neighborhood.request_arc: " +
-                        @"Already got $(mac) on $(my_nic.mac)");
+                        @"Already got $(mac) on $(my_nic.i_neighborhood_mac)");
                         return;
                     }
-                    if (arc.mac == mac || arc.my_nic.equals(my_nic))
+                    if (arc.i_neighborhood_mac == mac || arc.my_nic.i_neighborhood_equals(my_nic))
                     {
                         // Not willing to make a new arc on same collision
                         // domain.
                         throw new RequestArcError.TWO_ARCS_ON_COLLISION_DOMAIN(
-                        @"Refusing $(mac) on $(my_nic.mac).");
+                        @"Refusing $(mac) on $(my_nic.i_neighborhood_mac).");
                     }
                     // Not this same arc. Continue searching for a previous arc.
                     continue;
                 }
             }
             // Is it on my network?
-            if (! its_id.is_on_same_network(my_id))
+            if (! its_id.i_neighborhood_is_on_same_network(my_id))
             {
                 // It's on different network. Refuse.
                 throw new RequestArcError.NOT_SAME_NETWORK(
@@ -599,7 +599,7 @@ namespace Netsukuku
                 @"Refusing $(mac) because too many arcs.");
             }
             // Let's make an arc
-            RealArc new_arc = new RealArc(its_id, mac, my_nic);
+            NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, mac, my_nic);
             arcs.add(new_arc);
             // start periodical ping
             start_arc_monitor(new_arc);
@@ -612,10 +612,10 @@ namespace Netsukuku
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
             // The message comes from my_nic.
             string my_dev = rpc_caller.dev;
-            INetworkInterface my_nic = get_monitoring_interface_from_dev(my_dev);
+            INeighborhoodNetworkInterface my_nic = get_monitoring_interface_from_dev(my_dev);
             // Use the callback saved in the INetworkInterface to prepare to
             // receive the ping.
-            my_nic.prepare_ping((uint)guid);
+            my_nic.i_neighborhood_prepare_ping((uint)guid);
         }
 
         public void remove_arc(INeighborhoodNodeID its_id, string mac,
@@ -625,7 +625,7 @@ namespace Netsukuku
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
             // The message comes from my_nic and its mac is mac.
             string my_dev = rpc_caller.dev;
-            INetworkInterface my_nic = null;
+            INeighborhoodNetworkInterface my_nic = null;
             try {
                 my_nic = get_monitoring_interface_from_dev(my_dev);
             } catch (RPCError e) {
@@ -633,11 +633,11 @@ namespace Netsukuku
                 return;
             }
             // Have I that arc?
-            foreach (RealArc arc in arcs)
+            foreach (NeighborhoodRealArc arc in arcs)
             {
-                if (arc.neighbour_id.equals(its_id) &&
-                    arc.mac == mac &&
-                    arc.my_nic.equals(my_nic))
+                if (arc.i_neighborhood_neighbour_id.i_neighborhood_equals(its_id) &&
+                    arc.i_neighborhood_mac == mac &&
+                    arc.my_nic.i_neighborhood_equals(my_nic))
                 {
                     remove_my_arc(arc, false);
                 }
