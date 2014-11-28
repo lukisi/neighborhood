@@ -8,16 +8,19 @@ namespace Netsukuku
     {
         private INeighborhoodNodeID _neighbour_id;
         private string _mac;
+        private string _nic_addr;
         private REM _cost;
         private INeighborhoodNetworkInterface _my_nic;
         public bool available;
 
         public NeighborhoodRealArc(INeighborhoodNodeID neighbour_id,
                        string mac,
+                       string nic_addr,
                        INeighborhoodNetworkInterface my_nic)
         {
             _neighbour_id = neighbour_id;
             _mac = mac;
+            _nic_addr = nic_addr;
             _my_nic = my_nic;
             available = false;
         }
@@ -25,6 +28,12 @@ namespace Netsukuku
         public INeighborhoodNetworkInterface my_nic {
             get {
                 return _my_nic;
+            }
+        }
+
+        public string nic_addr {
+            get {
+                return _nic_addr;
             }
         }
 
@@ -56,11 +65,13 @@ namespace Netsukuku
                 return _neighbour_id;
             }
         }
+
         public string i_neighborhood_mac {
             get {
                 return _mac;
             }
         }
+
         public REM i_neighborhood_cost {
             get {
                 return _cost;
@@ -99,6 +110,11 @@ namespace Netsukuku
                             INeighborhoodNetworkInterface nic,
                             bool wait_reply=true
                         );
+        public abstract IAddressManagerRootDispatcher
+                        i_neighborhood_get_tcp(
+                            string dest,
+                            bool wait_reply=true
+                        );
         public  IAddressManagerRootDispatcher
                 i_neighborhood_get_broadcast_to_nic(
                     BroadcastID bcid,
@@ -115,6 +131,36 @@ namespace Netsukuku
         }
     }
 
+    /* This interface is implemented by an object passed to the Neighbor manager
+     * which uses it to manage addresses and routes of the O.S. (specifically in
+     * order to have a fixed address for each NIC and be able to contact via TCP
+     * its neighbors with their fixed addresses)
+     */
+    public interface INeighborhoodIPRouteManager : Object
+    {
+        public abstract void i_neighborhood_add_address(
+                            string my_addr,
+                            string my_dev
+                        );
+
+        public abstract void i_neighborhood_add_neighbor(
+                            string my_addr,
+                            string my_dev,
+                            string neighbor_addr
+                        );
+
+        public abstract void i_neighborhood_remove_neighbor(
+                            string my_addr,
+                            string my_dev,
+                            string neighbor_addr
+                        );
+
+        public abstract void i_neighborhood_remove_address(
+                            string my_addr,
+                            string my_dev
+                        );
+    }
+
     class NeighborhoodIgnoreMissing : Object, INeighborhoodMissingArcHandler
     {
         public void i_neighborhood_missing(INeighborhoodArc arc, INeighborhoodArcRemover arc_remover) {}
@@ -128,12 +174,15 @@ namespace Netsukuku
     {
         public NeighborhoodManager(INeighborhoodNodeID my_id,
                                    int max_arcs,
-                                   INeighborhoodStubFactory stub_factory)
+                                   INeighborhoodStubFactory stub_factory,
+                                   INeighborhoodIPRouteManager ip_mgr)
         {
             this.my_id = my_id;
             this.max_arcs = max_arcs;
             this.stub_factory = stub_factory;
+            this.ip_mgr = ip_mgr;
             nics = new HashMap<string, INeighborhoodNetworkInterface>();
+            local_addresses = new HashMap<string, string>();
             monitoring_devs = new HashMap<string, Tasklet>();
             arcs = new ArrayList<NeighborhoodRealArc>(
                 /*EqualDataFunc*/
@@ -156,7 +205,9 @@ namespace Netsukuku
         private INeighborhoodNodeID my_id;
         private int max_arcs;
         private INeighborhoodStubFactory stub_factory;
+        private INeighborhoodIPRouteManager ip_mgr;
         private HashMap<string, INeighborhoodNetworkInterface> nics;
+        private HashMap<string, string> local_addresses;
         private HashMap<string, Tasklet> monitoring_devs;
         private ArrayList<NeighborhoodRealArc> arcs;
         private HashMap<NeighborhoodRealArc, Tasklet> monitoring_arcs;
@@ -182,13 +233,24 @@ namespace Netsukuku
                 assert(present.i_neighborhood_dev != dev);
                 assert(present.i_neighborhood_mac != mac);
             }
+            // generate a random IP for this nic
+            int i1 = Random.int_range(64, 127);
+            int i2 = Random.int_range(0, 255);
+            int i3 = Random.int_range(0, 255);
+            string local_address = @"100.$(i1).$(i2).$(i3)";
+            ip_mgr.i_neighborhood_add_address(local_address, dev);
+            // start monitor
             Tasklet t = Tasklet.tasklet_callback(
-                (t_nic) => {
-                    monitor_run(t_nic as INeighborhoodNetworkInterface);
+                (t_nic, t_local_address) => {
+                    monitor_run(t_nic as INeighborhoodNetworkInterface,
+                                (t_local_address as SerializableString).s);
                 },
-                nic);
+                nic,
+                new SerializableString(local_address));
+            // private members
             monitoring_devs[dev] = t;
             nics[dev] = nic;
+            local_addresses[dev] = local_address;
         }
 
         public void stop_monitor(string dev)
@@ -204,10 +266,15 @@ namespace Netsukuku
             {
                 remove_my_arc(arc);
             }
-            // remove nic
+            // stop monitor
             monitoring_devs[dev].abort();
+            // remove local address
+            string local_address = local_addresses[dev];
+            ip_mgr.i_neighborhood_remove_address(local_address, dev);
+            // cleanup private members
             monitoring_devs.unset(dev);
             nics.unset(dev);
+            local_addresses.unset(dev);
         }
 
         public bool is_monitoring(string dev)
@@ -224,7 +291,7 @@ namespace Netsukuku
 
         /* Runs in a tasklet foreach device
          */
-        private void monitor_run(INeighborhoodNetworkInterface nic)
+        private void monitor_run(INeighborhoodNetworkInterface nic, string local_address)
         {
             while (true)
             {
@@ -234,7 +301,7 @@ namespace Netsukuku
                         i_neighborhood_get_broadcast_to_nic(nic);
                         // nothing to do for missing ACK from known neighbours
                         // because this message would be not important for them anyway.
-                    bc.neighborhood_manager.here_i_am(my_id, nic.i_neighborhood_mac);
+                    bc.neighborhood_manager.here_i_am(my_id, nic.i_neighborhood_mac, local_address);
                 }
                 catch (RPCError e)
                 {
@@ -279,54 +346,59 @@ namespace Netsukuku
                 long last_rtt = -1;
                 while (true)
                 {
-                    // Use a unicast to prepare the neighbor.
-                    // It can throw RPCError.
-                    var uc = i_neighborhood_get_unicast(arc);
-                    int guid = Random.int_range(0, 1000000);
-                    uc.neighborhood_manager.expect_ping(guid);
-                    Tasklet.nap(1, 0);
-                    // Use the callback saved in the INetworkInterface to get the
-                    // RTT. It can throw GetRttError.
-                    long rtt = arc.my_nic.i_neighborhood_get_usec_rtt((uint)guid);
-                    // If all goes right, the arc is still valid and we have the
-                    // cost up-to-date.
-                    if (last_rtt == -1)
+                    try
                     {
-                        // First cost measure
-                        last_rtt = rtt;
-                        REM cost = new RTT(last_rtt);
-                        arc.set_cost(cost);
-                        // signal new arc
-                        arc_added(arc);
-                    }
-                    else
-                    {
-                        // Following cost measures
-                        long delta_rtt = rtt - last_rtt;
-                        if (delta_rtt > 0) delta_rtt = delta_rtt / 10;
-                        if (delta_rtt < 0) delta_rtt = delta_rtt / 3;
-                        last_rtt = last_rtt + delta_rtt;
-                        if (last_rtt < (arc.i_neighborhood_cost as RTT).delay * 0.5 ||
-                            last_rtt > (arc.i_neighborhood_cost as RTT).delay * 2)
+                        // Use a tcp_client to prepare the neighbor.
+                        // It can throw RPCError.
+                        var uc = i_neighborhood_get_tcp(arc);
+                        int guid = Random.int_range(0, 1000000);
+                        uc.neighborhood_manager.expect_ping(guid);
+                        Tasklet.nap(1, 0);
+                        // Use the callback saved in the INetworkInterface to get the
+                        // RTT. It can throw GetRttError.
+                        long rtt = arc.my_nic.i_neighborhood_get_usec_rtt((uint)guid);
+                        // If all goes right, the arc is still valid and we have the
+                        // cost up-to-date.
+                        if (last_rtt == -1)
                         {
+                            // First cost measure
+                            last_rtt = rtt;
                             REM cost = new RTT(last_rtt);
                             arc.set_cost(cost);
-                            // signal changed arc
-                            arc_changed(arc);
+                            // signal new arc
+                            arc_added(arc);
                         }
-                    }
+                        else
+                        {
+                            // Following cost measures
+                            long delta_rtt = rtt - last_rtt;
+                            if (delta_rtt > 0) delta_rtt = delta_rtt / 10;
+                            if (delta_rtt < 0) delta_rtt = delta_rtt / 3;
+                            last_rtt = last_rtt + delta_rtt;
+                            if (last_rtt < (arc.i_neighborhood_cost as RTT).delay * 0.5 ||
+                                last_rtt > (arc.i_neighborhood_cost as RTT).delay * 2)
+                            {
+                                REM cost = new RTT(last_rtt);
+                                arc.set_cost(cost);
+                                // signal changed arc
+                                arc_changed(arc);
+                            }
+                        }
 
-                    Tasklet.nap(30, 0);
+                        Tasklet.nap(30, 0);
+                    }
+                    catch (GetRttError e)
+                    {
+                        // failed getting the RTT
+                        // Since UDP is not reliable, this is ignorable. Try again soon.
+                        Tasklet.nap(1, 0);
+                    }
                 }
-            }
-            catch (GetRttError e)
-            {
-                // remove arc
-                remove_my_arc(arc);
             }
             catch (RPCError e)
             {
-                // remove arc
+                // failed sending the GUID
+                // Since it was sent via TCP this is worrying.
                 remove_my_arc(arc);
             }
         }
@@ -346,14 +418,22 @@ namespace Netsukuku
             NeighborhoodRealArc _arc = (NeighborhoodRealArc)arc;
             // do just once
             if (! arcs.contains(_arc)) return;
+            // remove the fixed address of the neighbor
+            ip_mgr.i_neighborhood_remove_neighbor(
+                        /*my_addr*/ local_addresses[_arc.my_nic.i_neighborhood_dev],
+                        /*my_dev*/ _arc.my_nic.i_neighborhood_dev,
+                        /*neighbor_addr*/ _arc.nic_addr);
             // remove the arc
             arcs.remove(_arc);
             // try and tell the neighbour to do the same
             if (do_tell)
             {
-                var uc = i_neighborhood_get_unicast(arc, false);
+                var uc = i_neighborhood_get_tcp(arc, false);
                 try {
-                    uc.neighborhood_manager.remove_arc(my_id, _arc.my_nic.i_neighborhood_mac);
+                    uc.neighborhood_manager
+                        .remove_arc(my_id,
+                                   _arc.my_nic.i_neighborhood_mac,
+                                   local_addresses[_arc.my_nic.i_neighborhood_dev]);
                 } catch (RPCError e) {}
             }
             // signal removed arc
@@ -410,7 +490,18 @@ namespace Netsukuku
             return ret;
         }
 
-        /* Get a client to call a unicast remote method
+        /* Get a client to call a unicast remote method via TCP
+         */
+        public
+        IAddressManagerRootDispatcher
+        i_neighborhood_get_tcp(INeighborhoodArc arc, bool wait_reply=true)
+        {
+            NeighborhoodRealArc _arc = (NeighborhoodRealArc)arc;
+            var uc = stub_factory.i_neighborhood_get_tcp(_arc.nic_addr, wait_reply);
+            return uc;
+        }
+
+        /* Get a client to call a unicast remote method via UDP
          */
         public
         IAddressManagerRootDispatcher
@@ -462,7 +553,7 @@ namespace Netsukuku
         /* Remotable methods
          */
 
-        public void here_i_am(INeighborhoodNodeID its_id, string mac, zcd.CallerInfo? _rpc_caller=null)
+        public void here_i_am(INeighborhoodNodeID its_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller=null)
         {
             assert(_rpc_caller != null);
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
@@ -512,6 +603,8 @@ namespace Netsukuku
                 return;
             }
             // We can try and make a new arc.
+            // Since we haven't yet an arc with this node, we cannot use TCP.
+            // We use unicast UDP, if it fails not a big problem, we'll retry soon.
             // UnicastID is such that if I send a message to it, the message will
             // be elaborated by the neighbor only once, when received through
             // the interface of this arc; hence, UnicastID will contain
@@ -524,7 +617,7 @@ namespace Netsukuku
             bool failed = false;
             try
             {
-                uc.neighborhood_manager.request_arc(my_id, my_nic.i_neighborhood_mac);
+                uc.neighborhood_manager.request_arc(my_id, my_nic.i_neighborhood_mac, local_addresses[my_dev]);
             }
             catch (RequestArcError e)
             {
@@ -539,19 +632,26 @@ namespace Netsukuku
             if (! (refused || failed))
             {
                 // Let's make an arc
-                NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, mac, my_nic);
+                NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, mac, nic_addr, my_nic);
                 arcs.add(new_arc);
+                // add the fixed address of the neighbor
+                ip_mgr.i_neighborhood_add_neighbor(
+                            /*my_addr*/ local_addresses[my_dev],
+                            /*my_dev*/ my_dev,
+                            /*neighbor_addr*/ nic_addr);
                 // start periodical ping
                 start_arc_monitor(new_arc);
             }
         }
 
-        public void request_arc(INeighborhoodNodeID its_id, string mac,
+        public void request_arc(INeighborhoodNodeID its_id, string mac, string nic_addr,
                                 zcd.CallerInfo? _rpc_caller=null) throws RequestArcError
         {
             assert(_rpc_caller != null);
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
             // The message comes from my_nic and its mac is mac.
+            // TODO check that nic_addr is in 100.64.0.0/10 class.
+            // TODO check that nic_addr is not conflicting with mine or my neighbors' ones.
             string my_dev = rpc_caller.dev;
             INeighborhoodNetworkInterface my_nic = null;
             try {
@@ -599,8 +699,13 @@ namespace Netsukuku
                 @"Refusing $(mac) because too many arcs.");
             }
             // Let's make an arc
-            NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, mac, my_nic);
+            NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, mac, nic_addr, my_nic);
             arcs.add(new_arc);
+            // add the fixed address of the neighbor
+            ip_mgr.i_neighborhood_add_neighbor(
+                        /*my_addr*/ local_addresses[my_dev],
+                        /*my_dev*/ my_dev,
+                        /*neighbor_addr*/ nic_addr);
             // start periodical ping
             start_arc_monitor(new_arc);
         }
@@ -618,7 +723,7 @@ namespace Netsukuku
             my_nic.i_neighborhood_prepare_ping((uint)guid);
         }
 
-        public void remove_arc(INeighborhoodNodeID its_id, string mac,
+        public void remove_arc(INeighborhoodNodeID its_id, string mac, string nic_addr,
                                 zcd.CallerInfo? _rpc_caller=null)
         {
             assert(_rpc_caller != null);
@@ -644,7 +749,7 @@ namespace Netsukuku
             }
         }
 
-        ~NeighborhoodManager()
+        public void stop_monitor_all()
         {
             var copy_devs = new ArrayList<string>();
             copy_devs.add_all(monitoring_devs.keys);
@@ -652,6 +757,12 @@ namespace Netsukuku
             {
                 stop_monitor(dev);
             }
+        }
+
+        ~NeighborhoodManager()
+        {
+            print("NeighborhoodManager destructor\n");
+            stop_monitor_all();
         }
     }
 }

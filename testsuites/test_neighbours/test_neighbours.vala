@@ -178,11 +178,11 @@ public class FakeBroadcastClient : FakeAddressManager
     }
     public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
     {assert(false);}  // never called in broadcast
-    public override void remove_arc (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+    public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
     {assert(false);}  // never called in broadcast
-    public override void request_arc (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+    public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
     {assert(false);}  // never called in broadcast
-	public override void here_i_am (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
 	{
 	    print("sending broadcast \"here_i_am\" to:");
 	    foreach (INeighborhoodNetworkInterface nic in nics) print(@" $(nic.i_neighborhood_dev)");
@@ -199,6 +199,7 @@ public class FakeBroadcastClient : FakeAddressManager
                 {
                     my_node_neighborhood_mgr.request_arc(f.neighbour_id,
                                                      f.neighbour_mac,
+                                                     ""/*TODO*/,
                                                      new CallerInfo("f_ip",
                                                                     "f_port",
                                                                     f.my_node_nic));
@@ -223,10 +224,6 @@ public class FakeUnicastClient : FakeAddressManager
             this.wait_reply = wait_reply;
     }
 
-    public override unowned INeighborhoodManager _neighborhood_manager_getter()
-    {
-        return this;
-    }
     public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
     {
         string dest_mac = ucid.mac;
@@ -242,19 +239,84 @@ public class FakeUnicastClient : FakeAddressManager
             }
         }
     }
-    public override void remove_arc (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+    public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
     {
         // TODO
     }
-    public override void request_arc (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+    public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
                 throws RequestArcError, RPCError
     {
         // just accept
         print(@"requested arc to $(ucid.mac)\n");
         // start a periodical ping, not needed for this testbed
     }
-	public override void here_i_am (INeighborhoodNodeID my_id, string mac, zcd.CallerInfo? _rpc_caller = null)
+	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
     {assert(false);}  // never called in unicast
+}
+
+public class FakeTCPClient : FakeAddressManager
+{
+    public string dest;
+    public bool wait_reply;
+
+    public FakeTCPClient(string dest, bool wait_reply)
+    {
+            this.dest = dest;
+            this.wait_reply = wait_reply;
+    }
+
+    public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
+    {
+        // TODO
+    }
+    public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
+    {
+        // TODO
+    }
+    public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
+                throws RequestArcError, RPCError
+    {
+        // TODO
+    }
+	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
+    {assert(false);}  // never called in unicast
+}
+
+public class FakeIPRouteManager : Object, INeighborhoodIPRouteManager
+{
+    public void i_neighborhood_add_address(
+                        string my_addr,
+                        string my_dev
+                    )
+    {
+        // TODO
+    }
+
+    public void i_neighborhood_add_neighbor(
+                        string my_addr,
+                        string my_dev,
+                        string neighbor_addr
+                    )
+    {
+        // TODO
+    }
+
+    public void i_neighborhood_remove_neighbor(
+                        string my_addr,
+                        string my_dev,
+                        string neighbor_addr
+                    )
+    {
+        // TODO
+    }
+
+    public void i_neighborhood_remove_address(
+                        string my_addr,
+                        string my_dev
+                    )
+    {
+        // TODO
+    }
 }
 
 public class FakeStubFactory: Object, INeighborhoodStubFactory
@@ -279,6 +341,15 @@ public class FakeStubFactory: Object, INeighborhoodStubFactory
                     )
     {
         return new FakeUnicastClient(ucid, nic, wait_reply);
+    }
+
+    public IAddressManagerRootDispatcher
+                    i_neighborhood_get_tcp(
+                        string dest,
+                        bool wait_reply=true
+                    )
+    {
+        return new FakeTCPClient(dest, wait_reply);
     }
 }
 
@@ -309,7 +380,7 @@ void main()
     assert(Tasklet.init());
     {
         // create module neighborhood
-        my_node_neighborhood_mgr = new NeighborhoodManager(id, 12, new FakeStubFactory());
+        my_node_neighborhood_mgr = new NeighborhoodManager(id, 12, new FakeStubFactory(), new FakeIPRouteManager());
         // connect signals
         my_node_neighborhood_mgr.network_collision.connect(
             (o) => {
@@ -344,6 +415,7 @@ void main()
         john.usec_rtt = 2000;
         my_node_neighborhood_mgr.here_i_am(john.neighbour_id,
                                        john.neighbour_mac,
+                                       ""/*TODO*/,
                                        new CallerInfo("john_ip",
                                                       "john_port",
                                                       john.my_node_nic));

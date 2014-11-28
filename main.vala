@@ -13,6 +13,63 @@ namespace Netsukuku
     public void    log_error(string msg)   {print(msg+"\n");}
     public void log_critical(string msg)   {print(msg+"\n");}
 
+    class MyIPRouteManager : Object, INeighborhoodIPRouteManager
+    {
+        public void i_neighborhood_add_address(
+                            string my_addr,
+                            string my_dev
+                        )
+        {
+            CommandResult com_ret = Tasklet.exec_command(@"ip address add $(my_addr) dev $(my_dev)");
+            if (com_ret.exit_status != 0)
+            {
+                print(@"$(com_ret.cmderr)\n");
+                assert(false);
+            }
+        }
+
+        public void i_neighborhood_add_neighbor(
+                            string my_addr,
+                            string my_dev,
+                            string neighbor_addr
+                        )
+        {
+            CommandResult com_ret = Tasklet.exec_command(@"ip route add $(neighbor_addr) dev $(my_dev) src $(my_addr)");
+            if (com_ret.exit_status != 0)
+            {
+                print(@"$(com_ret.cmderr)\n");
+                assert(false);
+            }
+        }
+
+        public void i_neighborhood_remove_neighbor(
+                            string my_addr,
+                            string my_dev,
+                            string neighbor_addr
+                        )
+        {
+            CommandResult com_ret = Tasklet.exec_command(@"ip route del $(neighbor_addr) dev $(my_dev) src $(my_addr)");
+            if (com_ret.exit_status != 0)
+            {
+                print(@"$(com_ret.cmderr)\n");
+                assert(false);
+            }
+        }
+
+        public void i_neighborhood_remove_address(
+                            string my_addr,
+                            string my_dev
+                        )
+        {
+            CommandResult com_ret = Tasklet.exec_command(@"ip address del $(my_addr)/32 dev $(my_dev)");
+            if (com_ret.exit_status != 0)
+            {
+                print(@"$(com_ret.cmderr)\n");
+                assert(false);
+            }
+        }
+    }
+
     class MyStubFactory: Object, INeighborhoodStubFactory
     {
         public IAddressManagerRootDispatcher
@@ -45,6 +102,16 @@ namespace Netsukuku
         {
             Nic _nic = (Nic)nic;
             var uc = new AddressManagerNeighbourClient(ucid, {_nic.i_neighborhood_dev}, null, wait_reply);
+            return uc;
+        }
+
+        public IAddressManagerRootDispatcher
+                        i_neighborhood_get_tcp(
+                            string dest,
+                            bool wait_reply=true
+                        )
+        {
+            var uc = new AddressManagerTCPClient(dest, null, null, wait_reply);
             return uc;
         }
     }
@@ -281,6 +348,19 @@ namespace Netsukuku
         data = payload.data.serialize();
     }
 
+    public void tcp_callback(CallerInfo caller,
+                                          TCPRequest tcprequest,
+                                          out RPCDispatcher? rpcdispatcher,
+                                          out uchar[] data,
+                                          out uchar[] response)
+    {
+        rpcdispatcher = null;
+        data = null;
+        response = null;
+        rpcdispatcher = new AddressManagerDispatcher(address_manager);
+        data = tcprequest.data.serialize();
+    }
+
     int main(string[] args)
     {
         Time n = Time.local(time_t());
@@ -302,6 +382,9 @@ namespace Netsukuku
             string my_mac = get_mac(iface).up();
             UDPServer udpserver = new UDPServer(udp_unicast_callback, udp_broadcast_callback, iface);
             udpserver.listen();
+            // Handle TCP
+            TCPServer tcpserver = new TCPServer(tcp_callback);
+            tcpserver.listen();
 
             Nic nic = new Nic(iface, my_mac,
                     /*long GetRTTSecondPart(uint guid)*/
@@ -324,7 +407,7 @@ namespace Netsukuku
             // create manager
             address_manager = new AddressManager();
             // create module neighborhood
-            address_manager.neighborhood_manager = new NeighborhoodManager(id, 12, new MyStubFactory());
+            address_manager.neighborhood_manager = new NeighborhoodManager(id, 12, new MyStubFactory(), new MyIPRouteManager());
             // connect signals
             address_manager.neighborhood_manager.network_collision.connect(
                 (o) => {
@@ -369,11 +452,14 @@ namespace Netsukuku
                 Tasklet.nap(0, 100000);
                 if (do_me_exit) break;
             }
-            // here address_manager.neighborhood_manager will be destroyed
+            address_manager.neighborhood_manager.stop_monitor_all();
+            // here address_manager.neighborhood_manager should be destroyed but it doesnt.
+            address_manager.neighborhood_manager = null;
             address_manager = null;
 
             udpserver.stop();
         }
+        Tasklet.nap(0, 100000);
         assert(Tasklet.kill());
         return 0;
     }
