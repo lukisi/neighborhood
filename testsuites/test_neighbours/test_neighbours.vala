@@ -155,21 +155,15 @@ public class FakeBroadcastClient : FakeAddressManager
 {
     public BroadcastID bcid;
     public Gee.Collection<INeighborhoodNetworkInterface> nics;
-    public INeighborhoodArcFinder arc_finder;
-    public INeighborhoodArcRemover arc_remover;
-    public INeighborhoodMissingArcHandler missing_handler;
+    public IAcknowledgementsCommunicator ack_com;
 
     public FakeBroadcastClient(BroadcastID bcid,
                         Gee.Collection<INeighborhoodNetworkInterface> nics,
-                        INeighborhoodArcFinder arc_finder,
-                        INeighborhoodArcRemover arc_remover,
-                        INeighborhoodMissingArcHandler missing_handler)
+                        IAcknowledgementsCommunicator ack_com)
     {
         this.bcid = bcid;
         this.nics = nics;
-        this.arc_finder = arc_finder;
-        this.arc_remover = arc_remover;
-        this.missing_handler = missing_handler;
+        this.ack_com = ack_com;
     }
 
     public override unowned INeighborhoodManager _neighborhood_manager_getter()
@@ -325,12 +319,10 @@ public class FakeStubFactory: Object, INeighborhoodStubFactory
                     i_neighborhood_get_broadcast(
                         BroadcastID bcid,
                         Gee.Collection<INeighborhoodNetworkInterface> nics,
-                        INeighborhoodArcFinder arc_finder,
-                        INeighborhoodArcRemover arc_remover,
-                        INeighborhoodMissingArcHandler missing_handler
+                        IAcknowledgementsCommunicator ack_com
                     )
     {
-        return new FakeBroadcastClient(bcid, nics, arc_finder, arc_remover, missing_handler);
+        return new FakeBroadcastClient(bcid, nics, ack_com);
     }
 
     public IAddressManagerRootDispatcher

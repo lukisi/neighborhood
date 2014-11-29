@@ -76,9 +76,7 @@ namespace Netsukuku
                         i_neighborhood_get_broadcast(
                             BroadcastID bcid,
                             Gee.Collection<INeighborhoodNetworkInterface> nics,
-                            INeighborhoodArcFinder arc_finder,
-                            INeighborhoodArcRemover arc_remover,
-                            INeighborhoodMissingArcHandler missing_handler
+                            IAcknowledgementsCommunicator ack_com
                         )
         {
             assert(! nics.is_empty);
@@ -89,7 +87,7 @@ namespace Netsukuku
                 devs.add(_nic.i_neighborhood_dev);
             }
             var bc = new AddressManagerBroadcastClient(bcid, devs.to_array(),
-                new MyAcknowledgementsCommunicator(bcid, nics, arc_finder, arc_remover, missing_handler));
+                ack_com);
             return bc;
         }
 
@@ -113,88 +111,6 @@ namespace Netsukuku
         {
             var uc = new AddressManagerTCPClient(dest, null, null, wait_reply);
             return uc;
-        }
-    }
-
-    /* The instance of this class is created when th stub factory is invoked to
-     * obtain a stub. In theory, the stub could be used for more than one call
-     * and asynchronously, hence the method prepare...
-     * When a remote call is made, immediately the tasklet spawned my the method
-     * 'prepare' will use the arc_finder to get the list.
-     */
-    class MyAcknowledgementsCommunicator : Object, IAcknowledgementsCommunicator
-    {
-        public BroadcastID bcid;
-        public Gee.Collection<INeighborhoodNetworkInterface> nics;
-        public INeighborhoodArcFinder arc_finder;
-        public INeighborhoodArcRemover arc_remover;
-        public INeighborhoodMissingArcHandler missing_handler;
-
-        public MyAcknowledgementsCommunicator(BroadcastID bcid,
-                            Gee.Collection<INeighborhoodNetworkInterface> nics,
-                            INeighborhoodArcFinder arc_finder,
-                            INeighborhoodArcRemover arc_remover,
-                            INeighborhoodMissingArcHandler missing_handler)
-        {
-            this.bcid = bcid;
-            this.nics = nics;
-            this.arc_finder = arc_finder;
-            this.arc_remover = arc_remover;
-            this.missing_handler = missing_handler;
-        }
-
-        public Channel prepare()
-        {
-            Channel ch = new Channel();
-            Tasklet.tasklet_callback(
-                (t_ack_comm, t_ch) => {
-                    MyAcknowledgementsCommunicator ack_comm = (MyAcknowledgementsCommunicator)t_ack_comm;
-                    ack_comm.gather_acks((Channel)t_ch);
-                },
-                this,
-                ch
-            );
-            return ch;
-        }
-
-        /* Gather ACKs from expected receivers of a broadcast message
-         */
-        void
-        gather_acks(Channel ch)
-        {
-            // prepare a list of expected receivers.
-            var lst_expected = arc_finder.i_neighborhood_current_arcs_for_broadcast(bcid, nics);
-            // Wait for the timeout and receive from the channel the list of ACKs.
-            Value v = ch.recv();
-            Gee.List<string> responding_macs = (Gee.List<string>)v;
-            // prepare a list of missed arcs.
-            var lst_missed = new ArrayList<INeighborhoodArc>();
-            foreach (INeighborhoodArc expected in lst_expected)
-            {
-                bool has_responded = false;
-                foreach (string responding_mac in responding_macs)
-                {
-                    if (expected.i_neighborhood_mac == responding_mac)
-                    {
-                        has_responded = true;
-                        break;
-                    }
-                }
-                if (! has_responded) lst_missed.add(expected);
-            }
-            // foreach missed arc launch in a tasklet
-            // the 'missing' callback.
-            foreach (INeighborhoodArc missed in lst_missed)
-            {
-                Tasklet.tasklet_callback(
-                    (t_ack_comm, t_missed) => {
-                        MyAcknowledgementsCommunicator ack_comm = (MyAcknowledgementsCommunicator)t_ack_comm;
-                        ack_comm.missing_handler.i_neighborhood_missing((INeighborhoodArc)t_missed, ack_comm.arc_remover);
-                    },
-                    this,
-                    missed
-                );
-            }
         }
     }
 
@@ -319,7 +235,7 @@ namespace Netsukuku
         INeighborhoodNetworkInterface? nic = null;
         try {
             nic = address_manager.neighborhood_manager
-                .get_monitoring_interface_from_dev(caller.dev);
+                .get_monitoring_interface_from_dev(caller.my_dev);
         } catch (RPCError e) {return;}
         if (address_manager.neighborhood_manager
                 .is_unicast_for_me(ucid, nic))
@@ -327,7 +243,7 @@ namespace Netsukuku
             rpcdispatcher = new AddressManagerDispatcher(address_manager);
             data = payload.data.serialize();
             devs_response = new ArrayList<string>();
-            devs_response.add(caller.dev);
+            devs_response.add(caller.my_dev);
         }
     }
 
@@ -468,6 +384,7 @@ namespace Netsukuku
     void safe_exit(int sig)
     {
         // We got here because of a signal. Quick processing.
+        print("\nkilled\n");
         do_me_exit = true;
     }
 }
