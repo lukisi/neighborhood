@@ -435,7 +435,8 @@ namespace Netsukuku
             // try and tell the neighbour to do the same
             if (do_tell)
             {
-                var uc = i_neighborhood_get_tcp(arc, false);
+                // use UDP, we just removed the local_address of the neighbor
+                var uc = i_neighborhood_get_unicast(arc, false);
                 try {
                     uc.neighborhood_manager
                         .remove_arc(my_id,
@@ -767,19 +768,16 @@ namespace Netsukuku
 
         public void stop_monitor_all()
         {
-            print("stop_monitor_all start\n");
             var copy_devs = new ArrayList<string>();
             copy_devs.add_all(monitoring_devs.keys);
             foreach (string dev in copy_devs)
             {
                 stop_monitor(dev);
             }
-            print("stop_monitor_all end\n");
         }
 
         ~NeighborhoodManager()
         {
-            print("NeighborhoodManager destructor\n");
             stop_monitor_all();
         }
     }
