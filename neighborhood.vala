@@ -167,6 +167,12 @@ namespace Netsukuku
                                        INeighborhoodArcFinder,
                                        INeighborhoodArcRemover
     {
+        public static void init()
+        {
+            // Register serializable types
+            // typeof(Xxx).class_peek();
+        }
+
         public NeighborhoodManager(INeighborhoodNodeID my_id,
                                    int max_arcs,
                                    INeighborhoodStubFactory stub_factory,
