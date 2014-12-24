@@ -60,6 +60,11 @@ namespace Netsukuku
             return other == this;
         }
 
+        public bool i_neighborhood_comes_from(zcd.CallerInfo rpc_caller)
+        {
+            return _nic_addr == rpc_caller.caller_ip;
+        }
+
         public INeighborhoodNodeID i_neighborhood_neighbour_id {
             get {
                 return _neighbour_id;
@@ -72,7 +77,7 @@ namespace Netsukuku
             }
         }
 
-        public REM i_neighborhood_cost {
+        public Object i_neighborhood_cost {
             get {
                 return _cost;
             }
@@ -572,11 +577,11 @@ namespace Netsukuku
             if (its_id.i_neighborhood_equals(my_id)) return;
             // It's a neighbour. The message comes from my_nic and its mac is mac.
             string my_dev = rpc_caller.my_dev;
-            INeighborhoodNetworkInterface my_nic = null;
-            try {
-                my_nic = get_monitoring_interface_from_dev(my_dev);
-            } catch (RPCError e) {
-                log_warn(@"Neighborhood.here_i_am: $(e.message)");
+            INeighborhoodNetworkInterface? my_nic
+                    = get_monitoring_interface_from_dev(my_dev);
+            if (my_nic == null)
+            {
+                log_warn(@"Neighborhood.here_i_am: $(my_dev) is not being monitored");
                 return;
             }
             // Did I already meet it? Did I already make an arc?
@@ -664,12 +669,12 @@ namespace Netsukuku
             // TODO check that nic_addr is in 100.64.0.0/10 class.
             // TODO check that nic_addr is not conflicting with mine or my neighbors' ones.
             string my_dev = rpc_caller.my_dev;
-            INeighborhoodNetworkInterface my_nic = null;
-            try {
-                my_nic = get_monitoring_interface_from_dev(my_dev);
-            } catch (RPCError e) {
-                log_warn(@"Neighborhood.request_arc: $(e.message)");
-                throw new RequestArcError.GENERIC(e.message);
+            INeighborhoodNetworkInterface? my_nic
+                    = get_monitoring_interface_from_dev(my_dev);
+            if (my_nic == null)
+            {
+                log_warn(@"Neighborhood.request_arc: $(my_dev) is not being monitored");
+                return;
             }
             // Did I already make an arc?
             foreach (NeighborhoodRealArc arc in arcs)

@@ -232,11 +232,10 @@ namespace Netsukuku
         try {
             ucid = (UnicastID)ISerializable.deserialize(payload.ser);
         } catch (SerializerError e) {return;}
-        INeighborhoodNetworkInterface? nic = null;
-        try {
-            nic = address_manager.neighborhood_manager
+        INeighborhoodNetworkInterface? nic
+                = address_manager.neighborhood_manager
                 .get_monitoring_interface_from_dev(caller.my_dev);
-        } catch (RPCError e) {return;}
+        if (nic == null) return;
         if (address_manager.neighborhood_manager
                 .is_unicast_for_me(ucid, nic))
         {
