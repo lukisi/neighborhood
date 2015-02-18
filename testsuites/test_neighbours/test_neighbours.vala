@@ -153,14 +153,14 @@ public class FakeNic : Object, INeighborhoodNetworkInterface
         }
     }
 
-    public long i_neighborhood_get_usec_rtt(uint guid) throws GetRttError
+    public long i_neighborhood_get_usec_rtt(uint guid) throws NeighborhoodGetRttError
     {
         // check if this guid has been previously registered into some fakenode
         foreach (FakeNeighbour f in FakeNeighbour.list)
         {
             if (f.check_guid(guid)) return f.usec_rtt;
         }
-        throw new GetRttError.GENERIC("Not reached");
+        throw new NeighborhoodGetRttError.GENERIC("Not reached");
     }
 
     public void i_neighborhood_prepare_ping(uint guid)

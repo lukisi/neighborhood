@@ -83,17 +83,11 @@ namespace Netsukuku
         public IAddressManagerRootDispatcher
                         i_neighborhood_get_broadcast(
                             BroadcastID bcid,
-                            Gee.Collection<INeighborhoodNetworkInterface> nics,
-                            IAcknowledgementsCommunicator ack_com
+                            Gee.Collection<string> devs,
+                            IAcknowledgementsCommunicator? ack_com
                         )
         {
-            assert(! nics.is_empty);
-            var devs = new ArrayList<string>();
-            foreach (INeighborhoodNetworkInterface nic in nics)
-            {
-                Nic _nic = (Nic)nic;
-                devs.add(_nic.i_neighborhood_dev);
-            }
+            assert(! devs.is_empty);
             var bc = new AddressManagerBroadcastClient(bcid, devs.to_array(),
                 ack_com);
             return bc;
@@ -102,19 +96,18 @@ namespace Netsukuku
         public IAddressManagerRootDispatcher
                         i_neighborhood_get_unicast(
                             UnicastID ucid,
-                            INeighborhoodNetworkInterface nic,
-                            bool wait_reply=true
+                            string dev,
+                            bool wait_reply
                         )
         {
-            Nic _nic = (Nic)nic;
-            var uc = new AddressManagerNeighbourClient(ucid, {_nic.i_neighborhood_dev}, null, wait_reply);
+            var uc = new AddressManagerNeighbourClient(ucid, {dev}, null, wait_reply);
             return uc;
         }
 
         public IAddressManagerRootDispatcher
                         i_neighborhood_get_tcp(
                             string dest,
-                            bool wait_reply=true
+                            bool wait_reply
                         )
         {
             var uc = new AddressManagerTCPClient(dest, null, null, wait_reply);
@@ -240,12 +233,8 @@ namespace Netsukuku
         try {
             ucid = (UnicastID)ISerializable.deserialize(payload.ser);
         } catch (SerializerError e) {return;}
-        INeighborhoodNetworkInterface? nic
-                = address_manager.neighborhood_manager
-                .get_monitoring_interface_from_dev(caller.my_dev);
-        if (nic == null) return;
         if (address_manager.neighborhood_manager
-                .is_unicast_for_me(ucid, nic))
+                .is_unicast_for_me(ucid, caller.my_dev))
         {
             rpcdispatcher = new AddressManagerDispatcher(address_manager);
             data = payload.data.serialize();
@@ -266,9 +255,13 @@ namespace Netsukuku
         try {
             bcid = (BroadcastID)ISerializable.deserialize(payload.ser);
         } catch (SerializerError e) {return;}
-        rpcdispatchers = new ArrayList<RPCDispatcher>();
-        rpcdispatchers.add(new AddressManagerDispatcher(address_manager));
-        data = payload.data.serialize();
+        if (address_manager.neighborhood_manager
+                .is_broadcast_for_me(bcid, caller.my_dev))
+        {
+            rpcdispatchers = new ArrayList<RPCDispatcher>();
+            rpcdispatchers.add(new AddressManagerDispatcher(address_manager));
+            data = payload.data.serialize();
+        }
     }
 
     public void tcp_callback(CallerInfo caller,
