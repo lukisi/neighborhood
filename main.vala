@@ -20,12 +20,14 @@ namespace Netsukuku
                             string my_dev
                         )
         {
-            CommandResult com_ret = Tasklet.exec_command(@"ip address add $(my_addr) dev $(my_dev)");
-            if (com_ret.exit_status != 0)
-            {
-                print(@"$(com_ret.cmderr)\n");
-                assert(false);
-            }
+            try {
+                CommandResult com_ret = Tasklet.exec_command(@"ip address add $(my_addr) dev $(my_dev)");
+                if (com_ret.exit_status != 0)
+                {
+                    print(@"$(com_ret.cmderr)\n");
+                    assert(false);
+                }
+            } catch (SpawnError e) {error("Unable to spawn a command");}
         }
 
         public void i_neighborhood_add_neighbor(
@@ -34,12 +36,14 @@ namespace Netsukuku
                             string neighbor_addr
                         )
         {
-            CommandResult com_ret = Tasklet.exec_command(@"ip route add $(neighbor_addr) dev $(my_dev) src $(my_addr)");
-            if (com_ret.exit_status != 0)
-            {
-                print(@"$(com_ret.cmderr)\n");
-                assert(false);
-            }
+            try {
+                CommandResult com_ret = Tasklet.exec_command(@"ip route add $(neighbor_addr) dev $(my_dev) src $(my_addr)");
+                if (com_ret.exit_status != 0)
+                {
+                    print(@"$(com_ret.cmderr)\n");
+                    assert(false);
+                }
+            } catch (SpawnError e) {error("Unable to spawn a command");}
         }
 
         public void i_neighborhood_remove_neighbor(
@@ -48,12 +52,14 @@ namespace Netsukuku
                             string neighbor_addr
                         )
         {
-            CommandResult com_ret = Tasklet.exec_command(@"ip route del $(neighbor_addr) dev $(my_dev) src $(my_addr)");
-            if (com_ret.exit_status != 0)
-            {
-                print(@"$(com_ret.cmderr)\n");
-                assert(false);
-            }
+            try {
+                CommandResult com_ret = Tasklet.exec_command(@"ip route del $(neighbor_addr) dev $(my_dev) src $(my_addr)");
+                if (com_ret.exit_status != 0)
+                {
+                    print(@"$(com_ret.cmderr)\n");
+                    assert(false);
+                }
+            } catch (SpawnError e) {error("Unable to spawn a command");}
         }
 
         public void i_neighborhood_remove_address(
@@ -61,12 +67,14 @@ namespace Netsukuku
                             string my_dev
                         )
         {
-            CommandResult com_ret = Tasklet.exec_command(@"ip address del $(my_addr)/32 dev $(my_dev)");
-            if (com_ret.exit_status != 0)
-            {
-                print(@"$(com_ret.cmderr)\n");
-                assert(false);
-            }
+            try {
+                CommandResult com_ret = Tasklet.exec_command(@"ip address del $(my_addr)/32 dev $(my_dev)");
+                if (com_ret.exit_status != 0)
+                {
+                    print(@"$(com_ret.cmderr)\n");
+                    assert(false);
+                }
+            } catch (SpawnError e) {error("Unable to spawn a command");}
         }
     }
 
@@ -153,7 +161,7 @@ namespace Netsukuku
         }
     }
 
-    public delegate long GetRTT(uint guid) throws GetRttError;
+    public delegate long GetRTT(uint guid) throws NeighborhoodGetRttError;
     public delegate void PreparePing(uint guid);
     public class Nic : Object, INeighborhoodNetworkInterface
     {
@@ -197,7 +205,7 @@ namespace Netsukuku
                 return _mac;
             }
         }
-        public long i_neighborhood_get_usec_rtt(uint guid) throws GetRttError
+        public long i_neighborhood_get_usec_rtt(uint guid) throws NeighborhoodGetRttError
         {
             return _get_usec_rtt(guid);
         }
@@ -310,7 +318,7 @@ namespace Netsukuku
                         }
                         catch (Tasklets.ChannelError e)
                         {
-                            throw new GetRttError.GENERIC("Not reached");
+                            throw new NeighborhoodGetRttError.GENERIC("Not reached");
                         }
                     },
                     /*void PreparePing(uint guid)*/

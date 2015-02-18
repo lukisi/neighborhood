@@ -9,11 +9,11 @@ bin_PROGRAMS =  \
 	neighborhoodclient \
 	$(NULL)
 
-TESTS = \
+check_PROGRAMS = \
 	test_neighbours \
 	$(NULL)
 
-check_PROGRAMS = \
+TESTS = \
 	test_neighbours \
 	$(NULL)
 
@@ -87,7 +87,6 @@ neighborhoodclient_LDADD = \
 
 libneighborhood_la_SOURCES = \
 	neighborhood.vala \
-	interfaces.vala \
 	$(NULL)
 
 libneighborhood_la_VALAFLAGS = \
@@ -127,7 +126,6 @@ CLEANFILES = \
 	$(srcdir)/main.c \
 	$(srcdir)/base_dispatcher.c \
 	$(srcdir)/neighborhood.c \
-	$(srcdir)/interfaces.c \
 	$(srcdir)/testsuites/test_neighbours/test_neighbours.c \
 	$(srcdir)/testsuites/test_neighbours/base_dispatcher.c \
 	$(NULL)

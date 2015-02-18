@@ -22,6 +22,82 @@ using Tasklets;
 
 namespace Netsukuku
 {
+    // in ntkd-rpc  INeighborhoodNodeID
+
+    public errordomain NeighborhoodGetRttError {
+        GENERIC
+    }
+
+    public interface INeighborhoodNetworkInterface : Object
+    {
+        public abstract string i_neighborhood_dev {get;}
+        public abstract string i_neighborhood_mac {get;}
+        public abstract long i_neighborhood_get_usec_rtt(uint guid) throws NeighborhoodGetRttError;
+        public abstract void i_neighborhood_prepare_ping(uint guid);
+        public abstract bool i_neighborhood_equals(INeighborhoodNetworkInterface other);
+    }
+
+    public interface INeighborhoodArc : Object
+    {
+        public abstract INeighborhoodNodeID i_neighborhood_neighbour_id {get;}
+        public abstract string i_neighborhood_mac {get;}
+        public abstract Object i_neighborhood_cost {get;}
+        public abstract bool i_neighborhood_is_nic(INeighborhoodNetworkInterface nic);
+        public abstract bool i_neighborhood_equals(INeighborhoodArc other);
+        public abstract bool i_neighborhood_comes_from(zcd.CallerInfo rpc_caller);
+    }
+
+    /* Interface of NeighborhoodManager to be used by who needs to remove arcs,
+     * e.g. instances of IMissingArcHandler.
+     */
+    public interface INeighborhoodArcRemover : Object
+    {
+        public abstract void
+                        i_neighborhood_arc_remover_remove(
+                            INeighborhoodArc arc
+                        );
+    }
+
+    /* Interface to be implemented by who needs to handle the case when a
+     * broadcast message does not reach an arc.
+     */
+    public interface INeighborhoodMissingArcHandler : Object
+    {
+        public abstract void
+                        i_neighborhood_missing(
+                            INeighborhoodArc arc,
+                            INeighborhoodArcRemover arc_remover
+                        );
+    }
+
+    /* Interface of NeighborhoodManager to be used by other modules when they
+     * need to send a message to a neighbor.
+     */
+    public interface INeighborhoodArcToStub : Object
+    {
+        public abstract IAddressManagerRootDispatcher
+                        i_neighborhood_get_broadcast(
+                            INeighborhoodMissingArcHandler? missing_handler=null,
+                            INeighborhoodNodeID? ignore_neighbour=null
+                        );
+        public abstract IAddressManagerRootDispatcher
+                        i_neighborhood_get_broadcast_to_nic(
+                            INeighborhoodNetworkInterface nic,
+                            INeighborhoodMissingArcHandler? missing_handler=null,
+                            INeighborhoodNodeID? ignore_neighbour=null
+                        );
+        public abstract IAddressManagerRootDispatcher
+                        i_neighborhood_get_unicast(
+                            INeighborhoodArc arc,
+                            bool wait_reply=true
+                        );
+        public abstract IAddressManagerRootDispatcher
+                        i_neighborhood_get_tcp(
+                            INeighborhoodArc arc,
+                            bool wait_reply=true
+                        );
+    }
+
     internal class NeighborhoodRealArc : Object, INeighborhoodArc
     {
         private INeighborhoodNodeID _neighbour_id;
@@ -123,7 +199,7 @@ namespace Netsukuku
                         i_neighborhood_get_broadcast(
                             BroadcastID bcid,
                             Gee.Collection<INeighborhoodNetworkInterface> nics,
-                            IAcknowledgementsCommunicator ack_com
+                            IAcknowledgementsCommunicator? ack_com=null
                         );
         public abstract IAddressManagerRootDispatcher
                         i_neighborhood_get_unicast(
@@ -140,7 +216,7 @@ namespace Netsukuku
                 i_neighborhood_get_broadcast_to_nic(
                     BroadcastID bcid,
                     INeighborhoodNetworkInterface nic,
-                    IAcknowledgementsCommunicator ack_com
+                    IAcknowledgementsCommunicator? ack_com=null
                 )
         {
             var _nics = new ArrayList<INeighborhoodNetworkInterface>();
@@ -390,7 +466,7 @@ namespace Netsukuku
                         uc.neighborhood_manager.expect_ping(guid);
                         Tasklet.nap(1, 0);
                         // Use the callback saved in the INetworkInterface to get the
-                        // RTT. It can throw GetRttError.
+                        // RTT. It can throw NeighborhoodGetRttError.
                         long rtt = arc.my_nic.i_neighborhood_get_usec_rtt((uint)guid);
                         // If all goes right, the arc is still valid and we have the
                         // cost up-to-date.
@@ -422,7 +498,7 @@ namespace Netsukuku
 
                         Tasklet.nap(30, 0);
                     }
-                    catch (GetRttError e)
+                    catch (NeighborhoodGetRttError e)
                     {
                         // failed getting the RTT
                         // Since UDP is not reliable, this is ignorable. Try again soon.
@@ -575,13 +651,14 @@ namespace Netsukuku
                              INeighborhoodMissingArcHandler? missing_handler=null,
                              INeighborhoodNodeID? ignore_neighbour=null)
         {
-            INeighborhoodMissingArcHandler _missing;
-            if (missing_handler == null) _missing = new NeighborhoodIgnoreMissing();
-            else _missing = missing_handler;
             var bcid = new BroadcastID(ignore_neighbour);
-            var bc = stub_factory.i_neighborhood_get_broadcast_to_nic(bcid, nic,
-                         new NeighborhoodAcknowledgementsCommunicator(bcid, nics.values, this, this, _missing));
-            return bc;
+            IAddressManagerRootDispatcher ret;
+            if (missing_handler == null)
+                ret = stub_factory.i_neighborhood_get_broadcast_to_nic(bcid, nic);
+            else
+                ret = stub_factory.i_neighborhood_get_broadcast_to_nic(bcid, nic,
+                         new NeighborhoodAcknowledgementsCommunicator(bcid, nics.values, this, this, missing_handler));
+            return ret;
         }
 
         /* Remotable methods
@@ -895,5 +972,12 @@ namespace Netsukuku
             }
         }
     }
+
+    // Defining extern functions.
+    // Do not make them 'public', because they are not exposed by this
+    // module (convenience library), but instead the module use them
+    // as they are provided by the core app.
+    extern void log_warn(string msg);
+    extern void log_error(string msg);
 }
 
