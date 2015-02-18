@@ -711,7 +711,7 @@ namespace Netsukuku
             {
                 uc.neighborhood_manager.request_arc(my_id, my_nic.i_neighborhood_mac, local_addresses[my_dev]);
             }
-            catch (RequestArcError e)
+            catch (NeighborhoodRequestArcError e)
             {
                 // arc refused
                 refused = true;
@@ -737,7 +737,7 @@ namespace Netsukuku
         }
 
         public void request_arc(INeighborhoodNodeID its_id, string mac, string nic_addr,
-                                zcd.CallerInfo? _rpc_caller=null) throws RequestArcError
+                                zcd.CallerInfo? _rpc_caller=null) throws NeighborhoodRequestArcError
         {
             assert(_rpc_caller != null);
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
@@ -769,7 +769,7 @@ namespace Netsukuku
                     {
                         // Not willing to make a new arc on same collision
                         // domain.
-                        throw new RequestArcError.TWO_ARCS_ON_COLLISION_DOMAIN(
+                        throw new NeighborhoodRequestArcError.TWO_ARCS_ON_COLLISION_DOMAIN(
                         @"Refusing $(mac) on $(my_nic.i_neighborhood_mac).");
                     }
                     // Not this same arc. Continue searching for a previous arc.
@@ -780,14 +780,14 @@ namespace Netsukuku
             if (! its_id.i_neighborhood_is_on_same_network(my_id))
             {
                 // It's on different network. Refuse.
-                throw new RequestArcError.NOT_SAME_NETWORK(
+                throw new NeighborhoodRequestArcError.NOT_SAME_NETWORK(
                 @"Refusing $(mac) because on different network.");
             }
             // Do I have too many arcs?
             if (arcs.size >= max_arcs)
             {
                 // Refuse.
-                throw new RequestArcError.TOO_MANY_ARCS(
+                throw new NeighborhoodRequestArcError.TOO_MANY_ARCS(
                 @"Refusing $(mac) because too many arcs.");
             }
             // Let's make an arc
