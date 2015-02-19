@@ -341,6 +341,7 @@ namespace Netsukuku
             if (! is_monitoring(dev)) return false;
             // Is it me?
             if (nics[dev].i_neighborhood_mac != ucid.mac) return false;
+            if (ucid.nodeid == null) return false;
             return my_id.i_neighborhood_equals(ucid.nodeid);
         }
 
@@ -349,6 +350,7 @@ namespace Netsukuku
             // Do I manage this dev?
             if (! is_monitoring(dev)) return false;
             // Am I to ignore?
+            if (bcid.ignore_nodeid == null) return true;
             return ! my_id.i_neighborhood_equals(bcid.ignore_nodeid);
         }
 
@@ -381,7 +383,7 @@ namespace Netsukuku
                     try
                     {
                         // Use a tcp_client to prepare the neighbor.
-                        // It can throw RPCError.
+                        // It can throw RPCError or NeighborhoodUnmanagedDeviceError.
                         var uc = get_stub_tcp(arc);
                         int guid = Random.int_range(0, 1000000);
                         uc.neighborhood_manager.expect_ping(guid);
@@ -430,8 +432,12 @@ namespace Netsukuku
             catch (RPCError e)
             {
                 // failed sending the GUID
-                // Since it was sent via TCP this is worrying.
-                log_warn(@"Neighborhood.arc_monitor_run: $(e.message)");
+                // Since it was sent via TCP this arc is non working.
+                remove_my_arc(arc);
+            }
+            catch (NeighborhoodUnmanagedDeviceError e)
+            {
+                // failed prepare ping. this is arc is non working.
                 remove_my_arc(arc);
             }
         }
@@ -510,7 +516,7 @@ namespace Netsukuku
             {
                 // test arc against bcid (e.g. ignore_neighbour)
                 if (bcid.ignore_nodeid != null)
-                    if (arc.i_neighborhood_neighbour_id.i_neighborhood_equals(bcid.ignore_nodeid as INeighborhoodNodeID)) continue;
+                    if (arc.i_neighborhood_neighbour_id.i_neighborhood_equals(bcid.ignore_nodeid)) continue;
                 // test arc against devs.
                 if (! (arc.i_neighborhood_nic.i_neighborhood_dev in devs)) continue;
                 // This should receive
@@ -649,6 +655,8 @@ namespace Netsukuku
         {
             assert(_rpc_caller != null);
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
+            // This call has to be made in UDP, else ignore it.
+            if (rpc_caller.my_dev == null) return;
             // This is called in broadcast. Maybe it's me.
             if (its_id.i_neighborhood_equals(my_id)) return;
             // It's a neighbour. The message comes from my_nic and its mac is mac.
@@ -741,6 +749,8 @@ namespace Netsukuku
         {
             assert(_rpc_caller != null);
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
+            // This call has to be made in UDP, else ignore it.
+            if (rpc_caller.my_dev == null) return;
             // The message comes from my_nic and its mac is mac.
             // TODO check that nic_addr is in 100.64.0.0/10 class.
             // TODO check that nic_addr is not conflicting with mine or my neighbors' ones.
@@ -803,21 +813,28 @@ namespace Netsukuku
         }
 
         public void expect_ping(int guid,
-                                zcd.CallerInfo? _rpc_caller=null) throws RPCError
+                                zcd.CallerInfo? _rpc_caller=null) throws NeighborhoodUnmanagedDeviceError
         {
             assert(_rpc_caller != null);
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
             // The message comes from my_nic.
             INeighborhoodNetworkInterface my_nic = null;
+            string search_term;
             if (rpc_caller.my_dev != null)
+            {
+                search_term = @"dev $(rpc_caller.my_dev)";
                 my_nic = get_monitoring_interface_from_dev(rpc_caller.my_dev);
+            }
             else
+            {
+                search_term = @"addr $(rpc_caller.my_ip)";
                 my_nic = get_monitoring_interface_from_localaddr(rpc_caller.my_ip);
+            }
             if (my_nic == null)
             {
-                string msg = @"not found handled interface for dev $(rpc_caller.my_dev) addr $(rpc_caller.my_ip)";
+                string msg = @"not found handled interface for $(search_term)";
                 log_warn(@"Neighborhood.expect_ping: $(msg)");
-                throw new RPCError.GENERIC(msg);
+                throw new NeighborhoodUnmanagedDeviceError.GENERIC(msg);
             }
             // Use the callback saved in the INetworkInterface to prepare to
             // receive the ping.
@@ -831,13 +848,20 @@ namespace Netsukuku
             CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
             // The message comes from my_nic.
             INeighborhoodNetworkInterface my_nic = null;
+            string search_term;
             if (rpc_caller.my_dev != null)
+            {
+                search_term = @"dev $(rpc_caller.my_dev)";
                 my_nic = get_monitoring_interface_from_dev(rpc_caller.my_dev);
+            }
             else
+            {
+                search_term = @"addr $(rpc_caller.my_ip)";
                 my_nic = get_monitoring_interface_from_localaddr(rpc_caller.my_ip);
+            }
             if (my_nic == null)
             {
-                string msg = @"not found handled interface for dev $(rpc_caller.my_dev) addr $(rpc_caller.my_ip)";
+                string msg = @"not found handled interface for $(search_term)";
                 log_warn(@"Neighborhood.remove_arc: $(msg)");
                 return;
             }
