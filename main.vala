@@ -154,37 +154,23 @@ namespace Netsukuku
         }
     }
 
-    public delegate long GetRTT(uint guid) throws NeighborhoodGetRttError;
-    public delegate void PreparePing(uint guid);
-    public class Nic : Object, INeighborhoodNetworkInterface
+    public class MyNetworkInterface : Object, INeighborhoodNetworkInterface
     {
-        public Nic(string dev,
+        public MyNetworkInterface(string dev,
                    string mac,
-                   GetRTT get_usec_rtt,
-                   PreparePing prepare_ping)
+                   UDPServer udpserver)
         {
             _dev = dev;
             _mac = mac;
-            _get_usec_rtt = get_usec_rtt;
-            _prepare_ping = prepare_ping;
+            _udpserver = udpserver;
         }
 
         private string _dev;
         private string _mac;
-        private unowned GetRTT _get_usec_rtt;
-        private unowned PreparePing _prepare_ping;
+        private UDPServer _udpserver;
 
         /* Public interface INetworkInterface
          */
-
-        public bool i_neighborhood_equals(INeighborhoodNetworkInterface other)
-        {
-            // This kind of equality test is ok because main.vala
-            // is the only able to create an instance
-            // of INetworkInterface and it won't create more than one
-            // instance per device at start.
-            return other == this;
-        }
 
         public string i_neighborhood_dev
         {
@@ -200,12 +186,19 @@ namespace Netsukuku
         }
         public long i_neighborhood_get_usec_rtt(uint guid) throws NeighborhoodGetRttError
         {
-            return _get_usec_rtt(guid);
+            try
+            {
+                return _udpserver.ping(guid);
+            }
+            catch (Tasklets.ChannelError e)
+            {
+                throw new NeighborhoodGetRttError.GENERIC("Not reached");
+            }
         }
 
         public void i_neighborhood_prepare_ping(uint guid)
         {
-            _prepare_ping(guid);
+            _udpserver.expect_ping(guid);
         }
     }
 
@@ -298,27 +291,11 @@ namespace Netsukuku
             string my_mac = get_mac(iface).up();
             UDPServer udpserver = new UDPServer(udp_unicast_callback, udp_broadcast_callback, iface);
             udpserver.listen();
+            MyNetworkInterface nic = new MyNetworkInterface(iface, my_mac, udpserver);
+
             // Handle TCP
             TCPServer tcpserver = new TCPServer(tcp_callback);
             tcpserver.listen();
-
-            Nic nic = new Nic(iface, my_mac,
-                    /*long GetRTTSecondPart(uint guid)*/
-                    (guid) => {
-                        try
-                        {
-                            return udpserver.ping(guid);
-                        }
-                        catch (Tasklets.ChannelError e)
-                        {
-                            throw new NeighborhoodGetRttError.GENERIC("Not reached");
-                        }
-                    },
-                    /*void PreparePing(uint guid)*/
-                    (guid) => {
-                        udpserver.expect_ping(guid);
-                    }
-            );
 
             // create manager
             address_manager = new AddressManager();
