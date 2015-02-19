@@ -172,15 +172,15 @@ public class FakeNic : Object, INeighborhoodNetworkInterface
 public class FakeBroadcastClient : FakeAddressManager
 {
     public BroadcastID bcid;
-    public Gee.Collection<INeighborhoodNetworkInterface> nics;
-    public IAcknowledgementsCommunicator ack_com;
+    public Gee.Collection<string> devs;
+    public IAcknowledgementsCommunicator? ack_com;
 
     public FakeBroadcastClient(BroadcastID bcid,
-                        Gee.Collection<INeighborhoodNetworkInterface> nics,
-                        IAcknowledgementsCommunicator ack_com)
+                        Gee.Collection<string> devs,
+                        IAcknowledgementsCommunicator? ack_com)
     {
         this.bcid = bcid;
-        this.nics = nics;
+        this.devs = devs;
         this.ack_com = ack_com;
     }
 
@@ -197,13 +197,13 @@ public class FakeBroadcastClient : FakeAddressManager
 	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
 	{
 	    print("sending broadcast \"here_i_am\" to:");
-	    foreach (INeighborhoodNetworkInterface nic in nics) print(@" $(nic.i_neighborhood_dev)");
+	    foreach (string dev in devs) print(@" $(dev)");
 	    print(".\n");
         foreach (FakeNeighbour f in FakeNeighbour.list)
         {
             bool f_has_received = false;
-            foreach (INeighborhoodNetworkInterface nic in nics)
-                if (f.my_node_nic == nic.i_neighborhood_dev)
+            foreach (string dev in devs)
+                if (f.my_node_nic == dev)
                     f_has_received = true;
             if (f_has_received)
             {
@@ -226,13 +226,13 @@ public class FakeBroadcastClient : FakeAddressManager
 public class FakeUnicastClient : FakeAddressManager
 {
     public UnicastID ucid;
-    public INeighborhoodNetworkInterface nic;
+    public string dev;
     public bool wait_reply;
 
-    public FakeUnicastClient(UnicastID ucid, INeighborhoodNetworkInterface nic, bool wait_reply)
+    public FakeUnicastClient(UnicastID ucid, string dev, bool wait_reply)
     {
             this.ucid = ucid;
-            this.nic = nic;
+            this.dev = dev;
             this.wait_reply = wait_reply;
     }
 
@@ -256,7 +256,7 @@ public class FakeUnicastClient : FakeAddressManager
         // TODO
     }
     public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
-                throws RequestArcError, RPCError
+                throws NeighborhoodRequestArcError, RPCError
     {
         // just accept
         print(@"requested arc to $(ucid.mac)\n");
@@ -286,7 +286,7 @@ public class FakeTCPClient : FakeAddressManager
         // TODO
     }
     public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
-                throws RequestArcError, RPCError
+                throws NeighborhoodRequestArcError, RPCError
     {
         // TODO
     }
@@ -336,21 +336,21 @@ public class FakeStubFactory: Object, INeighborhoodStubFactory
     public IAddressManagerRootDispatcher
                     i_neighborhood_get_broadcast(
                         BroadcastID bcid,
-                        Gee.Collection<INeighborhoodNetworkInterface> nics,
-                        IAcknowledgementsCommunicator ack_com
+                        Gee.Collection<string> devs,
+                        IAcknowledgementsCommunicator? ack_com
                     )
     {
-        return new FakeBroadcastClient(bcid, nics, ack_com);
+        return new FakeBroadcastClient(bcid, devs, ack_com);
     }
 
     public IAddressManagerRootDispatcher
                     i_neighborhood_get_unicast(
                         UnicastID ucid,
-                        INeighborhoodNetworkInterface nic,
+                        string dev,
                         bool wait_reply=true
                     )
     {
-        return new FakeUnicastClient(ucid, nic, wait_reply);
+        return new FakeUnicastClient(ucid, dev, wait_reply);
     }
 
     public IAddressManagerRootDispatcher
