@@ -315,7 +315,7 @@ namespace Netsukuku
                 (arc) => {
                     Time m = Time.local(time_t());
                     print(@"$(m) ");
-                    print(@"Added arc with $(arc.i_neighborhood_mac), RTT $(arc.i_neighborhood_cost as RTT)\n");
+                    print(@"Added arc with $(arc.i_neighborhood_mac), RTT $(arc.i_neighborhood_cost)\n");
                 }
             );
             address_manager.neighborhood_manager.arc_removed.connect(
@@ -329,7 +329,7 @@ namespace Netsukuku
                 (arc) => {
                     Time m = Time.local(time_t());
                     print(@"$(m) ");
-                    print(@"Changed arc with $(arc.i_neighborhood_mac), RTT $(arc.i_neighborhood_cost as RTT)\n");
+                    print(@"Changed arc with $(arc.i_neighborhood_mac), RTT $(arc.i_neighborhood_cost)\n");
                 }
             );
             // run monitor

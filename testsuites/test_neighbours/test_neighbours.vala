@@ -51,12 +51,14 @@ public class SimulatorCollisionDomain : Object
     public bool active;
     public long delay_min;
     public long delay_max;
+    public ArrayList<uint> ping_guids;
     public SimulatorCollisionDomain()
     {
         collision_domains.add(this);
         active = true;
         delay_min = 9700;
         delay_max = 10200;
+        ping_guids = new ArrayList<uint>();
     }
 }
 
@@ -71,12 +73,43 @@ public class SimulatorNode : Object
         id = new MyNodeID(netid);
     }
 
+    public void print_signals(NeighborhoodManager mgr)
+    {
+        mgr.network_collision.connect(
+            (o) => {
+                MyNodeID other = o as MyNodeID;
+                if (other == null) return;
+                print(@"Manager for node $(id.id) signals: ");
+                print(@"Collision with netid $(other.netid)\n");
+            }
+        );
+        mgr.arc_added.connect(
+            (arc) => {
+                print(@"Manager for node $(id.id) signals: ");
+                print(@"Added arc with $(arc.i_neighborhood_mac), RTT $(arc.i_neighborhood_cost)\n");
+            }
+        );
+        mgr.arc_removed.connect(
+            (arc) => {
+                print(@"Manager for node $(id.id) signals: ");
+                print(@"Removed arc with $(arc.i_neighborhood_mac)\n");
+            }
+        );
+        mgr.arc_changed.connect(
+            (arc) => {
+                print(@"Manager for node $(id.id) signals: ");
+                print(@"Changed arc with $(arc.i_neighborhood_mac), RTT $(arc.i_neighborhood_cost)\n");
+            }
+        );
+    }
+
     public class SimulatorDevice : Object
     {
         public bool working;
         public SimulatorCollisionDomain? collision_domain;
         public string mac;
         public ArrayList<string> addresses;
+        public ArrayList<string> neighbors;
         public NeighborhoodManager? mgr;
         public SimulatorDevice(SimulatorCollisionDomain? collision_domain)
         {
@@ -84,6 +117,7 @@ public class SimulatorNode : Object
             working = true;
             mgr = null;
             addresses = new ArrayList<string>();
+            neighbors = new ArrayList<string>();
             string letters = "0123456789ABCDEF";
             mac = "";
             for (int i = 0; i < 6; i++)
@@ -124,6 +158,7 @@ int main()
     node_c.devices["eth0"] = new SimulatorNode.SimulatorDevice(col_b);
 
     var node_a_mgr = new NeighborhoodManager(node_a.id, 12, new FakeStubFactory(node_a), new FakeIPRouteManager(node_a));
+    node_a.print_signals(node_a_mgr);
     node_a_mgr.start_monitor(new FakeNic(node_a.devices["eth0"]));
         node_a.devices["eth0"].mgr = node_a_mgr;
         ms_wait(10);
@@ -135,10 +170,12 @@ int main()
         ms_wait(10);
     ms_wait(100);
     var node_b_mgr = new NeighborhoodManager(node_b.id, 12, new FakeStubFactory(node_b), new FakeIPRouteManager(node_b));
+    node_b.print_signals(node_b_mgr);
     node_b_mgr.start_monitor(new FakeNic(node_b.devices["eth0"]));
         node_b.devices["eth0"].mgr = node_b_mgr;
         ms_wait(10);
-    ms_wait(100);
+
+    ms_wait(2000);
 
     node_a_mgr.stop_monitor_all();
     ms_wait(100);
@@ -221,14 +258,22 @@ public class FakeNic : Object, INeighborhoodNetworkInterface
 
     public long i_neighborhood_get_usec_rtt(uint guid) throws NeighborhoodGetRttError
     {
-        // TODO
-        assert_not_reached();
+        print(@"Device $(_mac) pinging with guid $(guid).\n");
+        if (device.collision_domain == null) throw new NeighborhoodGetRttError.GENERIC("No carrier");
+        SimulatorCollisionDomain dom = device.collision_domain;
+        if (guid in dom.ping_guids)
+        {
+            dom.ping_guids.remove(guid);
+            return Random.int_range((int32)dom.delay_min, (int32)dom.delay_max);
+        }
+        throw new NeighborhoodGetRttError.GENERIC("No recv");
     }
 
     public void i_neighborhood_prepare_ping(uint guid)
     {
-        // TODO
-        assert_not_reached();
+        print(@"Device $(_mac) willing to answer pings with guid $(guid).\n");
+        if (device.collision_domain == null) return;
+        device.collision_domain.ping_guids.add(guid);
     }
 }
 
@@ -398,6 +443,7 @@ public class FakeUnicastClient : FakeAddressManager
 	private class UnicastCallRequestArc : Object
 	{
         public UnicastID ucid;
+        public Channel? reply_ch;
         public SimulatorNode caller_node;
         public long delay;
         public INeighborhoodNodeID arg_my_id;
@@ -421,7 +467,8 @@ public class FakeUnicastClient : FakeAddressManager
 	    print(@"           my mac is $(mac)\n");
 	    print(@"           my nic_addr is $(nic_addr)\n");
 	    if (wait_reply && ! node.devices[dev].working) throw new RPCError.GENERIC("my device not working.");
-	    // if (wait_reply)  ... prepara channel per la risposta
+	    Channel? reply_ch = null;
+	    if (wait_reply) reply_ch = new Channel();
 	    if (node.devices[dev].working)
 	    {
 	        SimulatorCollisionDomain? dom = node.devices[dev].collision_domain;
@@ -439,6 +486,7 @@ public class FakeUnicastClient : FakeAddressManager
 	                            long delay = Random.int_range((int32)dom.delay_min, (int32)dom.delay_max);
 	                            UnicastCallRequestArc call = new UnicastCallRequestArc();
 	                            call.ucid = ucid;
+	                            call.reply_ch = reply_ch;
 	                            call.caller_node = node;
 	                            call.delay = delay;
 	                            call.arg_my_id = my_id;
@@ -458,10 +506,29 @@ public class FakeUnicastClient : FakeAddressManager
 	                                    try {
 	                                        MyNodeID t_my_id = (MyNodeID)ISerializable.deserialize(
 	                                            ((MyNodeID)t_call.arg_my_id).serialize());
-	                                        t_devc.mgr.here_i_am(t_my_id,
-	                                                             t_call.arg_mac,
-	                                                             t_call.arg_nic_addr,
-	                                                             new CallerInfo(t_call.caller_ip, null, t_call.callee_dev));
+	                                        try {
+	                                            t_devc.mgr.request_arc(t_my_id,
+	                                                                   t_call.arg_mac,
+	                                                                   t_call.arg_nic_addr,
+	                                                                   new CallerInfo(t_call.caller_ip, null, t_call.callee_dev));
+	                                            if (t_call.reply_ch != null) t_call.reply_ch.send(new SerializableNone());
+	                                        } catch (NeighborhoodRequestArcError e) {
+	                                            if (t_call.reply_ch != null)
+	                                            {
+                                                    RemotableException re = new RemotableException();
+                                                    re.message = e.message;
+                                                    re.domain = "NeighborhoodRequestArcError";
+                                                    if (e is NeighborhoodRequestArcError.NOT_SAME_NETWORK)
+                                                        re.code = "NOT_SAME_NETWORK";
+                                                    if (e is NeighborhoodRequestArcError.TOO_MANY_ARCS)
+                                                        re.code = "TOO_MANY_ARCS";
+                                                    if (e is NeighborhoodRequestArcError.TWO_ARCS_ON_COLLISION_DOMAIN)
+                                                        re.code = "TWO_ARCS_ON_COLLISION_DOMAIN";
+                                                    if (e is NeighborhoodRequestArcError.GENERIC)
+                                                        re.code = "GENERIC";
+                                                    t_call.reply_ch.send(re);
+	                                            }
+	                                        }
 	                                    } catch (SerializerError e) {}
 	                                },
 	                                call);
@@ -472,9 +539,29 @@ public class FakeUnicastClient : FakeAddressManager
 	            }
 	        }
 	    }
-	    // if (wait_reply)  ... ascolta channel per la risposta
-        // TODO
-        assert_not_reached();
+	    if (wait_reply)
+	    {
+	        try {
+	            ISerializable resp = (ISerializable)reply_ch.recv_with_timeout(2000);
+                if (resp.get_type().is_a(typeof(RemotableException)))
+                {
+                    RemotableException e = (RemotableException)resp;
+                    if (e.domain == "NeighborhoodRequestArcError")
+                    {
+                        if (e.code == "NOT_SAME_NETWORK")
+                            throw new NeighborhoodRequestArcError.NOT_SAME_NETWORK(e.message);
+                        if (e.code == "TOO_MANY_ARCS")
+                            throw new NeighborhoodRequestArcError.TOO_MANY_ARCS(e.message);
+                        if (e.code == "TWO_ARCS_ON_COLLISION_DOMAIN")
+                            throw new NeighborhoodRequestArcError.TWO_ARCS_ON_COLLISION_DOMAIN(e.message);
+                        if (e.code == "GENERIC")
+                            throw new NeighborhoodRequestArcError.GENERIC(e.message);
+                    }
+                    assert_not_reached();
+                }
+                return; // ok
+	        } catch (ChannelError e) {throw new RPCError.GENERIC("no answer");}
+	    }
 	}
 
 	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
@@ -500,9 +587,55 @@ public class FakeTCPClient : FakeAddressManager
     }
 
     public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
+                throws NeighborhoodUnmanagedDeviceError, RPCError
 	{
-        // TODO
-        assert_not_reached();
+	    print(@"sending to $(dest) 'expect_ping($(guid))' from node $(node.id.id).\n");
+	    bool found = false;
+	    SimulatorNode? found_node = null;
+	    SimulatorCollisionDomain? found_dom = null;
+	    SimulatorNode.SimulatorDevice? found_devc = null;
+	    SimulatorNode.SimulatorDevice? found_my_devc = null;
+	    foreach (SimulatorNode.SimulatorDevice devc in node.devices.values) if (dest in devc.neighbors)
+	    {
+	        if (devc.working)
+	        {
+	            SimulatorCollisionDomain? dom = devc.collision_domain;
+	            if (dom != null && dom.active)
+        	    {
+	                foreach (SimulatorNode other_node in nodes) if (other_node != node)
+	                {
+	                    foreach (string callee_dev in other_node.devices.keys)
+	                    {
+	                        SimulatorNode.SimulatorDevice other_devc = other_node.devices[callee_dev];
+	                        if (other_devc.working)
+	                        {
+	                            if (other_devc.collision_domain == dom)
+	                            {
+	                                if (dest in other_devc.addresses)
+	                                {
+	                                    if (found) throw new RPCError.GENERIC("conflicting IP");
+	                                    found = true;
+	                                    found_node = other_node;
+	                                    found_dom = dom;
+	                                    found_my_devc = devc;
+	                                    found_devc = other_devc;
+	                                }
+	                            }
+	                        }
+	                    }
+	                }
+	            }
+	        }
+	    }
+	    if (found)
+	    {
+            long delay = Random.int_range((int32)found_dom.delay_min, (int32)found_dom.delay_max);
+            ms_wait(delay/1000);
+            if (found_devc.mgr == null) throw new RPCError.GENERIC("no connect");
+            if (found_my_devc.addresses.is_empty) throw new RPCError.GENERIC("no connect");
+            found_devc.mgr.expect_ping(guid, new CallerInfo(found_my_devc.addresses[0], dest, null));
+        }
+        else throw new RPCError.GENERIC("no connect");
 	}
 
     public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
@@ -551,8 +684,12 @@ public class FakeIPRouteManager : Object, INeighborhoodIPRouteManager
                         string neighbor_addr
                     )
     {
-        // TODO
-        assert_not_reached();
+        print(@"adding neighbor $(neighbor_addr) reachable through $(my_dev) which has $(my_addr) of node $(node.id.id).\n");
+        assert(my_dev in node.devices.keys);
+        SimulatorNode.SimulatorDevice dev = node.devices[my_dev];
+        assert(my_addr in dev.addresses);
+        assert(! (neighbor_addr in dev.neighbors));
+        dev.neighbors.add(neighbor_addr);
     }
 
     public void i_neighborhood_remove_neighbor(
@@ -561,8 +698,12 @@ public class FakeIPRouteManager : Object, INeighborhoodIPRouteManager
                         string neighbor_addr
                     )
     {
-        // TODO
-        assert_not_reached();
+        print(@"removing neighbor $(neighbor_addr) reachable through $(my_dev) which has $(my_addr) of node $(node.id.id).\n");
+        assert(my_dev in node.devices.keys);
+        SimulatorNode.SimulatorDevice dev = node.devices[my_dev];
+        assert(my_addr in dev.addresses);
+        assert(neighbor_addr in dev.neighbors);
+        dev.neighbors.remove(neighbor_addr);
     }
 
     public void i_neighborhood_remove_address(
