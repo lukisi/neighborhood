@@ -749,7 +749,7 @@ namespace Netsukuku
             // This call has to be made in UDP, else ignore it.
             if (rpc_caller.my_dev == null) return;
             // The message comes from my_nic and its mac is mac.
-            // TODO check that nic_addr is in 100.64.0.0/10 class.
+            // TODO check that nic_addr is in 169.254.0.0/10 class.
             // TODO check that nic_addr is not conflicting with mine or my neighbors' ones.
             string my_dev = rpc_caller.my_dev;
             INeighborhoodNetworkInterface? my_nic

@@ -434,10 +434,93 @@ public class FakeUnicastClient : FakeAddressManager
         assert_not_reached();
 	}
 
+	private class UnicastCallRemoveArc : Object
+	{
+        public UnicastID ucid;
+        public Channel? reply_ch;
+        public SimulatorNode caller_node;
+        public long delay;
+        public INeighborhoodNodeID arg_my_id;
+        public string arg_mac;
+        public string arg_nic_addr;
+        public string caller_ip;
+        public string callee_dev;
+        public SimulatorNode callee_node;
+	}
     public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
 	{
-        // TODO
-        assert_not_reached();
+	    print(@"sending to unicast 'remove_arc' from node $(node.id.id) through dev $(dev),\n");
+	    if (wait_reply) print(@"        waiting reply,\n");
+	    print(@"        to node $((ucid.nodeid as MyNodeID).id).\n");
+	    print(@"        Saying:\n");
+	    assert(my_id is MyNodeID);
+	    MyNodeID _my_id = my_id as MyNodeID;
+	    print(@"           my id is $(_my_id.id)\n");
+	    print(@"           my netid is $(_my_id.netid)\n");
+	    print(@"           my mac is $(mac)\n");
+	    print(@"           my nic_addr is $(nic_addr)\n");
+	    if (wait_reply && ! node.devices[dev].working) throw new RPCError.GENERIC("my device not working.");
+	    Channel? reply_ch = null;
+	    if (wait_reply) reply_ch = new Channel();
+	    if (node.devices[dev].working)
+	    {
+	        SimulatorCollisionDomain? dom = node.devices[dev].collision_domain;
+	        if (dom != null && dom.active)
+    	    {
+	            foreach (SimulatorNode other_node in nodes) if (other_node != node)
+	            {
+	                foreach (string callee_dev in other_node.devices.keys)
+	                {
+	                    SimulatorNode.SimulatorDevice devc = other_node.devices[callee_dev];
+	                    if (devc.working)
+	                    {
+	                        if (devc.collision_domain == dom)
+	                        {
+	                            long delay = Random.int_range((int32)dom.delay_min, (int32)dom.delay_max);
+	                            UnicastCallRemoveArc call = new UnicastCallRemoveArc();
+	                            call.ucid = ucid;
+	                            call.reply_ch = reply_ch;
+	                            call.caller_node = node;
+	                            call.delay = delay;
+	                            call.arg_my_id = my_id;
+	                            call.arg_mac = mac;
+	                            call.arg_nic_addr = nic_addr;
+	                            call.caller_ip = "";
+	                            call.callee_dev = callee_dev;
+	                            call.callee_node = other_node;
+	                            Tasklet.tasklet_callback(
+	                                (_call) => {
+	                                    UnicastCallRemoveArc t_call = (UnicastCallRemoveArc)_call;
+	                                    ms_wait(t_call.delay/1000);
+	                                    SimulatorNode.SimulatorDevice t_devc =
+                                            t_call.callee_node.devices[t_call.callee_dev];
+	                                    if ((! t_devc.working) || t_devc.mgr == null) return;
+	                                    if (! t_devc.mgr.is_unicast_for_me(t_call.ucid, t_call.callee_dev)) return;
+	                                    try {
+	                                        MyNodeID t_my_id = (MyNodeID)ISerializable.deserialize(
+	                                            ((MyNodeID)t_call.arg_my_id).serialize());
+                                            t_devc.mgr.remove_arc(t_my_id,
+                                                                   t_call.arg_mac,
+                                                                   t_call.arg_nic_addr,
+                                                                   new CallerInfo(t_call.caller_ip, null, t_call.callee_dev));
+                                            if (t_call.reply_ch != null) t_call.reply_ch.send(new SerializableNone());
+	                                    } catch (SerializerError e) {}
+	                                },
+	                                call);
+	                            // end tasklet body
+	                        }
+	                    }
+	                }
+	            }
+	        }
+	    }
+	    if (wait_reply)
+	    {
+	        try {
+	            ISerializable resp = (ISerializable)reply_ch.recv_with_timeout(2000);
+                return; // ok
+	        } catch (ChannelError e) {throw new RPCError.GENERIC("no answer");}
+	    }
 	}
 
 	private class UnicastCallRequestArc : Object
