@@ -33,13 +33,129 @@ namespace Netsukuku
     public void log_critical(string msg)   {print(msg+"\n");}
 }
 
+bool init_done = false;
+ArrayList<SimulatorCollisionDomain> collision_domains;
+ArrayList<SimulatorNode> nodes;
+void init()
+{
+    if (!init_done)
+    {
+        collision_domains = new ArrayList<SimulatorCollisionDomain>();
+        nodes = new ArrayList<SimulatorNode>();
+        init_done = true;
+    }
+}
+
+public class SimulatorCollisionDomain : Object
+{
+    public bool active;
+    public long delay_min;
+    public long delay_max;
+    public SimulatorCollisionDomain()
+    {
+        collision_domains.add(this);
+        active = true;
+        delay_min = 9700;
+        delay_max = 10200;
+    }
+}
+
+public class SimulatorNode : Object
+{
+    public HashMap<string, SimulatorDevice> devices;
+    public MyNodeID id;
+    public SimulatorNode(int netid)
+    {
+        nodes.add(this);
+        devices = new HashMap<string, SimulatorDevice>();
+        id = new MyNodeID(netid);
+    }
+
+    public class SimulatorDevice : Object
+    {
+        public bool working;
+        public SimulatorCollisionDomain? collision_domain;
+        public string mac;
+        public ArrayList<string> addresses;
+        public NeighborhoodManager? mgr;
+        public SimulatorDevice(SimulatorCollisionDomain? collision_domain)
+        {
+            this.collision_domain = collision_domain;
+            working = true;
+            mgr = null;
+            addresses = new ArrayList<string>();
+            string letters = "0123456789ABCDEF";
+            mac = "";
+            for (int i = 0; i < 6; i++)
+            {
+                if (i > 0) mac += ":";
+                for (int j = 0; j < 2; j++)
+                {
+                    mac += letters.substring(Random.int_range(0, letters.length), 1);
+                }
+            }
+        }
+    }
+}
+
+int main()
+{
+    init();
+    // init tasklet
+    assert(Tasklet.init());
+    // Initialize rpc library
+    Serializer.init();
+    // Register serializable types from model
+    RpcNtk.init();
+    // Register more serializable types
+    typeof(MyNodeID).class_peek();
+    // Initialize module
+    NeighborhoodManager.init();
+
+    var col_a = new SimulatorCollisionDomain();
+    var col_b = new SimulatorCollisionDomain();
+    var node_a = new SimulatorNode(1);
+    node_a.devices["eth0"] = new SimulatorNode.SimulatorDevice(col_a);
+    node_a.devices["eth1"] = new SimulatorNode.SimulatorDevice(col_b);
+    node_a.devices["eth2"] = new SimulatorNode.SimulatorDevice(null);
+    var node_b = new SimulatorNode(1);
+    node_b.devices["eth0"] = new SimulatorNode.SimulatorDevice(col_a);
+    var node_c = new SimulatorNode(1);
+    node_c.devices["eth0"] = new SimulatorNode.SimulatorDevice(col_b);
+
+    var node_a_mgr = new NeighborhoodManager(node_a.id, 12, new FakeStubFactory(node_a), new FakeIPRouteManager(node_a));
+    node_a_mgr.start_monitor(new FakeNic(node_a.devices["eth0"]));
+        node_a.devices["eth0"].mgr = node_a_mgr;
+        ms_wait(10);
+    node_a_mgr.start_monitor(new FakeNic(node_a.devices["eth1"]));
+        node_a.devices["eth1"].mgr = node_a_mgr;
+        ms_wait(10);
+    node_a_mgr.start_monitor(new FakeNic(node_a.devices["eth2"]));
+        node_a.devices["eth2"].mgr = node_a_mgr;
+        ms_wait(10);
+    ms_wait(100);
+    var node_b_mgr = new NeighborhoodManager(node_b.id, 12, new FakeStubFactory(node_b), new FakeIPRouteManager(node_b));
+    node_b_mgr.start_monitor(new FakeNic(node_b.devices["eth0"]));
+        node_b.devices["eth0"].mgr = node_b_mgr;
+        ms_wait(10);
+    ms_wait(100);
+
+    node_a_mgr.stop_monitor_all();
+    ms_wait(100);
+    node_b_mgr.stop_monitor_all();
+    ms_wait(100);
+
+    assert(Tasklet.kill());
+    return 0;
+}
+
 public class MyNodeID : Object, ISerializable, INeighborhoodNodeID
 {
     public int id {get; private set;}
     public int netid {get; private set;}
     public MyNodeID(int netid)
     {
-        id = Random.int_range(0, 10000);
+        id = Random.int_range(0, int.MAX);
         this.netid = netid;
     }
 
@@ -72,73 +188,22 @@ public class MyNodeID : Object, ISerializable, INeighborhoodNodeID
     }
 }
 
-public class FakeNeighbour : Object
-{
-    // list of neighbours in this testbed.
-    private static ArrayList<FakeNeighbour> _list = null;
-    public static ArrayList<FakeNeighbour> list {
-        get {
-            if (_list == null) _list = new ArrayList<FakeNeighbour>();
-            return _list;
-        }
-    }
-    // constructor
-    public FakeNeighbour()
-    {
-        list.add(this);
-    }
-    // this fake neighbour is reached by my node's nic.
-    public string my_node_nic;
-    // this fake neighbour has this ID.
-    public INeighborhoodNodeID neighbour_id;
-    // this fake neighbour has this mac.
-    public string neighbour_mac;
-    // this fake neighbour has this RTT.
-    public long usec_rtt;
-    // this fake neighbour has already an arc with me.
-    public bool has_arc = false;
-    // guid registered for ping.
-    private HashMap<long, Tasklets.Timer> guids_timeout = null;
-    public void register_guid(long guid)
-    {
-        if (guids_timeout == null) guids_timeout = new HashMap<long, Tasklets.Timer>();
-        guids_timeout[guid] = new Tasklets.Timer(3000);
-    }
-    public bool check_guid(long guid)
-    {
-        if (guids_timeout == null) guids_timeout = new HashMap<long, Tasklets.Timer>();
-        foreach (long k in guids_timeout.keys.to_array())
-        {
-            if (guids_timeout[k].is_expired()) guids_timeout.unset(k);
-            else if (k == guid) return true;
-        }
-        return false;
-    }
-}
-
 public class FakeNic : Object, INeighborhoodNetworkInterface
 {
-    public FakeNic(string dev, string mac)
+    public SimulatorNode.SimulatorDevice device;
+    public FakeNic(SimulatorNode.SimulatorDevice device)
     {
-        _dev = dev;
-        _mac = mac;
+        this.device = device;
+        _mac = device.mac;
+        foreach (SimulatorNode node in nodes)
+            foreach (string k in node.devices.keys)
+                if (node.devices[k] == device) _dev = k;
     }
-
-    private string _dev;
-    private string _mac;
 
     /* Public interface INeighborhoodNetworkInterface
      */
 
-    public bool i_neighborhood_equals(INeighborhoodNetworkInterface other)
-    {
-        // This kind of equality test is ok because this vala file
-        // is the only able to create an instance
-        // of INeighborhoodNetworkInterface and it won't create more than one
-        // instance per device at start.
-        return other == this;
-    }
-
+    private string _dev;
     public string i_neighborhood_dev
     {
         get {
@@ -146,6 +211,7 @@ public class FakeNic : Object, INeighborhoodNetworkInterface
         }
     }
 
+    private string _mac;
     public string i_neighborhood_mac
     {
         get {
@@ -155,17 +221,14 @@ public class FakeNic : Object, INeighborhoodNetworkInterface
 
     public long i_neighborhood_get_usec_rtt(uint guid) throws NeighborhoodGetRttError
     {
-        // check if this guid has been previously registered into some fakenode
-        foreach (FakeNeighbour f in FakeNeighbour.list)
-        {
-            if (f.check_guid(guid)) return f.usec_rtt;
-        }
-        throw new NeighborhoodGetRttError.GENERIC("Not reached");
+        // TODO
+        assert_not_reached();
     }
 
     public void i_neighborhood_prepare_ping(uint guid)
     {
-        // This would register this guid, but nothing to do in this testbed.
+        // TODO
+        assert_not_reached();
     }
 }
 
@@ -174,52 +237,132 @@ public class FakeBroadcastClient : FakeAddressManager
     public BroadcastID bcid;
     public Gee.Collection<string> devs;
     public IAcknowledgementsCommunicator? ack_com;
+    public SimulatorNode node;
 
-    public FakeBroadcastClient(BroadcastID bcid,
+    public FakeBroadcastClient(
+                        SimulatorNode node,
+                        BroadcastID bcid,
                         Gee.Collection<string> devs,
                         IAcknowledgementsCommunicator? ack_com)
     {
+        this.node = node;
         this.bcid = bcid;
         this.devs = devs;
         this.ack_com = ack_com;
     }
 
-    public override unowned INeighborhoodManager _neighborhood_manager_getter()
-    {
-        return this;
-    }
     public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
-    {assert(false);}  // never called in broadcast
+    {
+        // never called in broadcast
+        assert_not_reached();
+    }
+
     public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
-    {assert(false);}  // never called in broadcast
+    {
+        // never called in broadcast
+        assert_not_reached();
+    }
+
     public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
-    {assert(false);}  // never called in broadcast
+    {
+        // never called in broadcast
+        assert_not_reached();
+    }
+
+	private class BroadcastCallHereIAm : Object
+	{
+        public BroadcastID bcid;
+        public Gee.List<string>? responding_macs;
+        public SimulatorNode caller_node;
+        public long delay;
+        public INeighborhoodNodeID arg_my_id;
+        public string arg_mac;
+        public string arg_nic_addr;
+        public string caller_ip;
+        public string callee_dev;
+        public SimulatorNode callee_node;
+	}
 	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
 	{
-	    print("sending broadcast \"here_i_am\" to:");
-	    foreach (string dev in devs) print(@" $(dev)");
-	    print(".\n");
-        foreach (FakeNeighbour f in FakeNeighbour.list)
-        {
-            bool f_has_received = false;
-            foreach (string dev in devs)
-                if (f.my_node_nic == dev)
-                    f_has_received = true;
-            if (f_has_received)
-            {
-                if (! f.has_arc)
-                {
-                    my_node_neighborhood_mgr.request_arc(f.neighbour_id,
-                                                     f.neighbour_mac,
-                                                     ""/*TODO*/,
-                                                     new CallerInfo("f_ip",
-                                                                    "f_port",
-                                                                    f.my_node_nic));
-                    f.has_arc = true;
-                }
-                // a periodical ping is not really needed in this testbed
-            }
-        }
+	    print(@"sending to broadcast 'here_i_am' from node $(node.id.id) through devs:\n");
+	    foreach (string dev in devs) print(@"        $(dev)\n");
+	    if (bcid.ignore_nodeid != null) print(@"        ignoring node $((bcid.ignore_nodeid as MyNodeID).id)\n");
+	    print(@"        saying:\n");
+	    assert(my_id is MyNodeID);
+	    MyNodeID _my_id = my_id as MyNodeID;
+	    print(@"           my id is $(_my_id.id)\n");
+	    print(@"           my netid is $(_my_id.netid)\n");
+	    print(@"           my mac is $(mac)\n");
+	    print(@"           my nic_addr is $(nic_addr)\n");
+	    Gee.List<string>? responding_macs = null;
+	    if (ack_com != null)
+	    {
+	        Channel ack_comm_ch = ack_com.prepare();
+	        responding_macs = new ArrayList<string>();
+            Tasklet.tasklet_callback(
+                (_ack_comm_ch, _responding_macs) => {
+                    Channel t_ack_comm_ch = (Channel)_ack_comm_ch;
+                    Gee.List<string> t_responding_macs = (Gee.List<string>)_responding_macs;
+                    ms_wait(3000);
+                    t_ack_comm_ch.send_async(t_responding_macs);
+                },
+                ack_comm_ch,
+                responding_macs);
+            // end tasklet body
+	    }
+	    foreach (string dev in devs) if (node.devices[dev].working)
+	    {
+	        SimulatorCollisionDomain? dom = node.devices[dev].collision_domain;
+	        if (dom != null && dom.active)
+    	    {
+	            foreach (SimulatorNode other_node in nodes) if (other_node != node)
+	            {
+	                foreach (string callee_dev in other_node.devices.keys)
+	                {
+	                    SimulatorNode.SimulatorDevice devc = other_node.devices[callee_dev];
+	                    if (devc.working)
+	                    {
+	                        if (devc.collision_domain == dom)
+	                        {
+	                            long delay = Random.int_range((int32)dom.delay_min, (int32)dom.delay_max);
+	                            BroadcastCallHereIAm call = new BroadcastCallHereIAm();
+	                            call.bcid = bcid;
+	                            call.responding_macs = responding_macs;
+	                            call.caller_node = node;
+	                            call.delay = delay;
+	                            call.arg_my_id = my_id;
+	                            call.arg_mac = mac;
+	                            call.arg_nic_addr = nic_addr;
+	                            call.caller_ip = "";
+	                            call.callee_dev = callee_dev;
+	                            call.callee_node = other_node;
+	                            Tasklet.tasklet_callback(
+	                                (_call) => {
+	                                    BroadcastCallHereIAm t_call = (BroadcastCallHereIAm)_call;
+	                                    ms_wait(t_call.delay/1000);
+	                                    SimulatorNode.SimulatorDevice t_devc =
+                                            t_call.callee_node.devices[t_call.callee_dev];
+	                                    if ((! t_devc.working) || t_devc.mgr == null) return;
+	                                    if (! t_devc.mgr.is_broadcast_for_me(t_call.bcid, t_call.callee_dev)) return;
+                                        if (t_call.responding_macs != null)
+                                            t_call.responding_macs.add(t_devc.mac);
+	                                    try {
+	                                        MyNodeID t_my_id = (MyNodeID)ISerializable.deserialize(
+	                                            ((MyNodeID)t_call.arg_my_id).serialize());
+	                                        t_devc.mgr.here_i_am(t_my_id,
+	                                                             t_call.arg_mac,
+	                                                             t_call.arg_nic_addr,
+	                                                             new CallerInfo(t_call.caller_ip, null, t_call.callee_dev));
+	                                    } catch (SerializerError e) {}
+	                                },
+	                                call);
+	                            // end tasklet body
+	                        }
+	                    }
+	                }
+	            }
+	        }
+	    }
 	}
 }
 
@@ -228,80 +371,178 @@ public class FakeUnicastClient : FakeAddressManager
     public UnicastID ucid;
     public string dev;
     public bool wait_reply;
+    public SimulatorNode node;
 
-    public FakeUnicastClient(UnicastID ucid, string dev, bool wait_reply)
+    public FakeUnicastClient(
+                        SimulatorNode node,
+                        UnicastID ucid, string dev, bool wait_reply)
     {
-            this.ucid = ucid;
-            this.dev = dev;
-            this.wait_reply = wait_reply;
+        this.node = node;
+        this.ucid = ucid;
+        this.dev = dev;
+        this.wait_reply = wait_reply;
     }
 
     public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
-    {
-        string dest_mac = ucid.mac;
-        INeighborhoodNodeID dest_id = ucid.nodeid as INeighborhoodNodeID;
-        // find the fakeneighbour
-        foreach (FakeNeighbour f in FakeNeighbour.list)
-        {
-            if (dest_mac == f.neighbour_mac &&
-                dest_id.i_neighborhood_equals(f.neighbour_id as INeighborhoodNodeID))
-            {
-                f.register_guid(guid);
-                break;
-            }
-        }
-    }
+	{
+        // never called in unicast
+        assert_not_reached();
+	}
+
     public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
-    {
+	{
         // TODO
-    }
+        assert_not_reached();
+	}
+
+	private class UnicastCallRequestArc : Object
+	{
+        public UnicastID ucid;
+        public SimulatorNode caller_node;
+        public long delay;
+        public INeighborhoodNodeID arg_my_id;
+        public string arg_mac;
+        public string arg_nic_addr;
+        public string caller_ip;
+        public string callee_dev;
+        public SimulatorNode callee_node;
+	}
     public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
                 throws NeighborhoodRequestArcError, RPCError
-    {
-        // just accept
-        print(@"requested arc to $(ucid.mac)\n");
-        // start a periodical ping, not needed for this testbed
-    }
+	{
+	    print(@"sending to unicast 'request_arc' from node $(node.id.id) through dev $(dev),\n");
+	    if (wait_reply) print(@"        waiting reply,\n");
+	    print(@"        to node $((ucid.nodeid as MyNodeID).id).\n");
+	    print(@"        Saying:\n");
+	    assert(my_id is MyNodeID);
+	    MyNodeID _my_id = my_id as MyNodeID;
+	    print(@"           my id is $(_my_id.id)\n");
+	    print(@"           my netid is $(_my_id.netid)\n");
+	    print(@"           my mac is $(mac)\n");
+	    print(@"           my nic_addr is $(nic_addr)\n");
+	    if (wait_reply && ! node.devices[dev].working) throw new RPCError.GENERIC("my device not working.");
+	    // if (wait_reply)  ... prepara channel per la risposta
+	    if (node.devices[dev].working)
+	    {
+	        SimulatorCollisionDomain? dom = node.devices[dev].collision_domain;
+	        if (dom != null && dom.active)
+    	    {
+	            foreach (SimulatorNode other_node in nodes) if (other_node != node)
+	            {
+	                foreach (string callee_dev in other_node.devices.keys)
+	                {
+	                    SimulatorNode.SimulatorDevice devc = other_node.devices[callee_dev];
+	                    if (devc.working)
+	                    {
+	                        if (devc.collision_domain == dom)
+	                        {
+	                            long delay = Random.int_range((int32)dom.delay_min, (int32)dom.delay_max);
+	                            UnicastCallRequestArc call = new UnicastCallRequestArc();
+	                            call.ucid = ucid;
+	                            call.caller_node = node;
+	                            call.delay = delay;
+	                            call.arg_my_id = my_id;
+	                            call.arg_mac = mac;
+	                            call.arg_nic_addr = nic_addr;
+	                            call.caller_ip = "";
+	                            call.callee_dev = callee_dev;
+	                            call.callee_node = other_node;
+	                            Tasklet.tasklet_callback(
+	                                (_call) => {
+	                                    UnicastCallRequestArc t_call = (UnicastCallRequestArc)_call;
+	                                    ms_wait(t_call.delay/1000);
+	                                    SimulatorNode.SimulatorDevice t_devc =
+                                            t_call.callee_node.devices[t_call.callee_dev];
+	                                    if ((! t_devc.working) || t_devc.mgr == null) return;
+	                                    if (! t_devc.mgr.is_unicast_for_me(t_call.ucid, t_call.callee_dev)) return;
+	                                    try {
+	                                        MyNodeID t_my_id = (MyNodeID)ISerializable.deserialize(
+	                                            ((MyNodeID)t_call.arg_my_id).serialize());
+	                                        t_devc.mgr.here_i_am(t_my_id,
+	                                                             t_call.arg_mac,
+	                                                             t_call.arg_nic_addr,
+	                                                             new CallerInfo(t_call.caller_ip, null, t_call.callee_dev));
+	                                    } catch (SerializerError e) {}
+	                                },
+	                                call);
+	                            // end tasklet body
+	                        }
+	                    }
+	                }
+	            }
+	        }
+	    }
+	    // if (wait_reply)  ... ascolta channel per la risposta
+        // TODO
+        assert_not_reached();
+	}
+
 	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
-    {assert(false);}  // never called in unicast
+	{
+        // never called in unicast
+        assert_not_reached();
+	}
 }
 
 public class FakeTCPClient : FakeAddressManager
 {
     public string dest;
     public bool wait_reply;
+    public SimulatorNode node;
 
-    public FakeTCPClient(string dest, bool wait_reply)
+    public FakeTCPClient(
+                        SimulatorNode node,
+                        string dest, bool wait_reply)
     {
-            this.dest = dest;
-            this.wait_reply = wait_reply;
+        this.node = node;
+        this.dest = dest;
+        this.wait_reply = wait_reply;
     }
 
     public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
-    {
+	{
         // TODO
-    }
+        assert_not_reached();
+	}
+
     public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
-    {
-        // TODO
-    }
+	{
+        // never called in tcp
+        assert_not_reached();
+	}
+
     public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
                 throws NeighborhoodRequestArcError, RPCError
-    {
-        // TODO
-    }
+	{
+        // never called in tcp
+        assert_not_reached();
+	}
+
 	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
-    {assert(false);}  // never called in unicast
+	{
+        // never called in tcp
+        assert_not_reached();
+	}
 }
 
 public class FakeIPRouteManager : Object, INeighborhoodIPRouteManager
 {
+    public SimulatorNode node;
+    public FakeIPRouteManager(SimulatorNode node)
+    {
+        this.node = node;
+    }
+
     public void i_neighborhood_add_address(
                         string my_addr,
                         string my_dev
                     )
     {
-        // TODO
+        print(@"adding address $(my_addr) to device $(my_dev) of node $(node.id.id).\n");
+        assert(my_dev in node.devices.keys);
+        SimulatorNode.SimulatorDevice dev = node.devices[my_dev];
+        assert(! (my_addr in dev.addresses));
+        dev.addresses.add(my_addr);
     }
 
     public void i_neighborhood_add_neighbor(
@@ -311,6 +552,7 @@ public class FakeIPRouteManager : Object, INeighborhoodIPRouteManager
                     )
     {
         // TODO
+        assert_not_reached();
     }
 
     public void i_neighborhood_remove_neighbor(
@@ -320,6 +562,7 @@ public class FakeIPRouteManager : Object, INeighborhoodIPRouteManager
                     )
     {
         // TODO
+        assert_not_reached();
     }
 
     public void i_neighborhood_remove_address(
@@ -327,12 +570,22 @@ public class FakeIPRouteManager : Object, INeighborhoodIPRouteManager
                         string my_dev
                     )
     {
-        // TODO
+        print(@"removing address $(my_addr) from device $(my_dev) of node $(node.id.id).\n");
+        assert(my_dev in node.devices.keys);
+        SimulatorNode.SimulatorDevice dev = node.devices[my_dev];
+        assert(my_addr in dev.addresses);
+        dev.addresses.remove(my_addr);
     }
 }
 
 public class FakeStubFactory: Object, INeighborhoodStubFactory
 {
+    public SimulatorNode node;
+    public FakeStubFactory(SimulatorNode node)
+    {
+        this.node = node;
+    }
+
     public IAddressManagerRootDispatcher
                     i_neighborhood_get_broadcast(
                         BroadcastID bcid,
@@ -340,7 +593,7 @@ public class FakeStubFactory: Object, INeighborhoodStubFactory
                         IAcknowledgementsCommunicator? ack_com
                     )
     {
-        return new FakeBroadcastClient(bcid, devs, ack_com);
+        return new FakeBroadcastClient(node, bcid, devs, ack_com);
     }
 
     public IAddressManagerRootDispatcher
@@ -350,7 +603,7 @@ public class FakeStubFactory: Object, INeighborhoodStubFactory
                         bool wait_reply=true
                     )
     {
-        return new FakeUnicastClient(ucid, dev, wait_reply);
+        return new FakeUnicastClient(node, ucid, dev, wait_reply);
     }
 
     public IAddressManagerRootDispatcher
@@ -359,79 +612,7 @@ public class FakeStubFactory: Object, INeighborhoodStubFactory
                         bool wait_reply=true
                     )
     {
-        return new FakeTCPClient(dest, wait_reply);
+        return new FakeTCPClient(node, dest, wait_reply);
     }
-}
-
-NeighborhoodManager my_node_neighborhood_mgr;
-
-void main()
-{
-    if (false)
-    {
-        // prepare some neighbour
-        FakeNeighbour n1 = new FakeNeighbour();
-        n1.my_node_nic = "fakeeth1";
-        n1.neighbour_id = new MyNodeID(1);
-        n1.neighbour_mac = "22:22:22:22:22:22";
-        n1.usec_rtt = 1300;
-        n1 = new FakeNeighbour();
-        n1.my_node_nic = "fakeeth1";
-        n1.neighbour_id = new MyNodeID(1);
-        n1.neighbour_mac = "33:33:33:33:33:33";
-        n1.usec_rtt = 20000;
-    }
-
-    string iface = "fakeeth1";
-    string mac = "4E:86:C7:5A:A8:CE";
-    // generate my nodeID on network 1
-    INeighborhoodNodeID id = new MyNodeID(1);
-    // init tasklet
-    assert(Tasklet.init());
-    {
-        // create module neighborhood
-        my_node_neighborhood_mgr = new NeighborhoodManager(id, 12, new FakeStubFactory(), new FakeIPRouteManager());
-        // connect signals
-        my_node_neighborhood_mgr.network_collision.connect(
-            (o) => {
-                MyNodeID other = o as MyNodeID;
-                if (other == null) return;
-                print(@"Collision with netid $(other.netid)\n");
-            }
-        );
-        my_node_neighborhood_mgr.arc_added.connect(
-            (arc) => {
-                print(@"Added arc with $(arc.i_neighborhood_mac)\n");
-            }
-        );
-        my_node_neighborhood_mgr.arc_removed.connect(
-            (arc) => {
-                print(@"Removed arc with $(arc.i_neighborhood_mac)\n");
-            }
-        );
-        my_node_neighborhood_mgr.arc_changed.connect(
-            (arc) => {
-                print(@"Changed arc with $(arc.i_neighborhood_mac)\n");
-            }
-        );
-        // run monitor
-        my_node_neighborhood_mgr.start_monitor(new FakeNic(iface, mac));
-        // wait a little, then receive a here_i_am from john
-        Tasklet.nap(2, 0);
-        FakeNeighbour john = new FakeNeighbour();
-        john.my_node_nic = "fakeeth1";
-        john.neighbour_id = new MyNodeID(1);
-        john.neighbour_mac = "44:44:44:44:44:44";
-        john.usec_rtt = 2000;
-        my_node_neighborhood_mgr.here_i_am(john.neighbour_id,
-                                       john.neighbour_mac,
-                                       ""/*TODO*/,
-                                       new CallerInfo("john_ip",
-                                                      "john_port",
-                                                      john.my_node_nic));
-        // Stay a while
-        Tasklet.nap(3, 0);
-    }
-    assert(Tasklet.kill());
 }
 

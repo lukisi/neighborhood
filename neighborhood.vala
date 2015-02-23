@@ -40,7 +40,7 @@ namespace Netsukuku
     {
         public abstract INeighborhoodNodeID i_neighborhood_neighbour_id {get;}
         public abstract string i_neighborhood_mac {get;}
-        public abstract REM i_neighborhood_cost {get;}
+        public abstract long i_neighborhood_cost {get;}
         public abstract INeighborhoodNetworkInterface i_neighborhood_nic {get;}
         public abstract bool i_neighborhood_comes_from(zcd.CallerInfo rpc_caller);
     }
@@ -50,7 +50,7 @@ namespace Netsukuku
         private INeighborhoodNodeID _neighbour_id;
         private string _mac;
         private string _nic_addr;
-        private REM _cost;
+        private long _cost;
         private INeighborhoodNetworkInterface _my_nic;
         public bool available;
 
@@ -78,7 +78,7 @@ namespace Netsukuku
             }
         }
 
-        public void set_cost(REM cost)
+        public void set_cost(long cost)
         {
             _cost = cost;
             available = true;
@@ -104,7 +104,7 @@ namespace Netsukuku
             }
         }
 
-        public REM i_neighborhood_cost {
+        public long i_neighborhood_cost {
             get {
                 return _cost;
             }
@@ -194,7 +194,7 @@ namespace Netsukuku
     {
         public static void init()
         {
-            // Register serializable types
+            // Register serializable types internal to the module.
             // typeof(Xxx).class_peek();
         }
 
@@ -246,10 +246,9 @@ namespace Netsukuku
                 assert(present.i_neighborhood_mac != mac);
             }
             // generate a random IP for this nic
-            int i1 = Random.int_range(64, 127);
             int i2 = Random.int_range(0, 255);
             int i3 = Random.int_range(0, 255);
-            string local_address = @"100.$(i1).$(i2).$(i3)";
+            string local_address = @"169.254.$(i2).$(i3)";
             ip_mgr.i_neighborhood_add_address(local_address, dev);
             // start monitor
             Tasklet t = Tasklet.tasklet_callback(
@@ -384,9 +383,9 @@ namespace Netsukuku
                     {
                         // Use a tcp_client to prepare the neighbor.
                         // It can throw RPCError or NeighborhoodUnmanagedDeviceError.
-                        var uc = get_stub_tcp(arc);
+                        var tc = get_stub_tcp(arc);
                         int guid = Random.int_range(0, 1000000);
-                        uc.neighborhood_manager.expect_ping(guid);
+                        tc.neighborhood_manager.expect_ping(guid);
                         Tasklet.nap(1, 0);
                         // Use the callback saved in the INetworkInterface to get the
                         // RTT. It can throw NeighborhoodGetRttError.
@@ -397,8 +396,7 @@ namespace Netsukuku
                         {
                             // First cost measure
                             last_rtt = rtt;
-                            REM cost = new RTT(last_rtt);
-                            arc.set_cost(cost);
+                            arc.set_cost(last_rtt);
                             // signal new arc
                             arc_added(arc);
                         }
@@ -409,11 +407,10 @@ namespace Netsukuku
                             if (delta_rtt > 0) delta_rtt = delta_rtt / 10;
                             if (delta_rtt < 0) delta_rtt = delta_rtt / 3;
                             last_rtt = last_rtt + delta_rtt;
-                            if (last_rtt < (arc.i_neighborhood_cost as RTT).delay * 0.5 ||
-                                last_rtt > (arc.i_neighborhood_cost as RTT).delay * 2)
+                            if (last_rtt < arc.i_neighborhood_cost * 0.5 ||
+                                last_rtt > arc.i_neighborhood_cost * 2)
                             {
-                                REM cost = new RTT(last_rtt);
-                                arc.set_cost(cost);
+                                arc.set_cost(last_rtt);
                                 // signal changed arc
                                 arc_changed(arc);
                             }
@@ -432,12 +429,12 @@ namespace Netsukuku
             catch (RPCError e)
             {
                 // failed sending the GUID
-                // Since it was sent via TCP this arc is non working.
+                // Since it was sent via TCP this arc is not working.
                 remove_my_arc(arc);
             }
             catch (NeighborhoodUnmanagedDeviceError e)
             {
-                // failed prepare ping. this is arc is non working.
+                // Failed prepare_ping. This arc is not working.
                 remove_my_arc(arc);
             }
         }
@@ -898,6 +895,5 @@ namespace Netsukuku
     // module (convenience library), but instead the module use them
     // as they are provided by the core app.
     extern void log_warn(string msg);
-    extern void log_error(string msg);
 }
 

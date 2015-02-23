@@ -32,6 +32,7 @@ test_neighbours_VALAFLAGS = \
 	$(NULL)
 
 test_neighbours_CPPFLAGS = \
+	-w \
 	$(GOBJECT_CFLAGS) \
 	$(GIO_CFLAGS) \
 	$(GEE_CFLAGS) \
@@ -67,6 +68,7 @@ neighborhoodclient_VALAFLAGS = \
 	$(NULL)
 
 neighborhoodclient_CPPFLAGS = \
+	-w \
 	$(GOBJECT_CFLAGS) \
 	$(GIO_CFLAGS) \
 	$(GEE_CFLAGS) \
@@ -102,6 +104,7 @@ libneighborhood_la_VALAFLAGS = \
 	$(NULL)
 
 libneighborhood_la_CPPFLAGS = \
+	-w \
 	$(GOBJECT_CFLAGS) \
 	$(GIO_CFLAGS) \
 	$(GEE_CFLAGS) \
