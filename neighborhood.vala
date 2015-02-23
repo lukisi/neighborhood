@@ -870,6 +870,8 @@ namespace Netsukuku
                     arc.my_nic == my_nic)
                 {
                     remove_my_arc(arc, false);
+                    // the foreach would abort if I don't break
+                    break;
                 }
             }
         }

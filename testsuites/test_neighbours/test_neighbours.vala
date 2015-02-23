@@ -155,7 +155,7 @@ int main()
     var node_b = new SimulatorNode(1);
     node_b.devices["eth0"] = new SimulatorNode.SimulatorDevice(col_a);
     var node_c = new SimulatorNode(1);
-    node_c.devices["eth0"] = new SimulatorNode.SimulatorDevice(col_b);
+    node_c.devices["eth0"] = new SimulatorNode.SimulatorDevice(col_a);
 
     var node_a_mgr = new NeighborhoodManager(node_a.id, 12, new FakeStubFactory(node_a), new FakeIPRouteManager(node_a));
     node_a.print_signals(node_a_mgr);
@@ -173,6 +173,12 @@ int main()
     node_b.print_signals(node_b_mgr);
     node_b_mgr.start_monitor(new FakeNic(node_b.devices["eth0"]));
         node_b.devices["eth0"].mgr = node_b_mgr;
+        ms_wait(10);
+    ms_wait(100);
+    var node_c_mgr = new NeighborhoodManager(node_c.id, 12, new FakeStubFactory(node_c), new FakeIPRouteManager(node_c));
+    node_c.print_signals(node_c_mgr);
+    node_c_mgr.start_monitor(new FakeNic(node_c.devices["eth0"]));
+        node_c.devices["eth0"].mgr = node_c_mgr;
         ms_wait(10);
 
     ms_wait(2000);
@@ -448,6 +454,7 @@ public class FakeUnicastClient : FakeAddressManager
         public SimulatorNode callee_node;
 	}
     public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
+                throws RPCError
 	{
 	    print(@"sending to unicast 'remove_arc' from node $(node.id.id) through dev $(dev),\n");
 	    if (wait_reply) print(@"        waiting reply,\n");
@@ -517,7 +524,7 @@ public class FakeUnicastClient : FakeAddressManager
 	    if (wait_reply)
 	    {
 	        try {
-	            ISerializable resp = (ISerializable)reply_ch.recv_with_timeout(2000);
+	            reply_ch.recv_with_timeout(2000);
                 return; // ok
 	        } catch (ChannelError e) {throw new RPCError.GENERIC("no answer");}
 	    }
