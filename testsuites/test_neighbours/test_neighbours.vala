@@ -71,6 +71,8 @@ public class SimulatorNode : Object
         nodes.add(this);
         devices = new HashMap<string, SimulatorDevice>();
         id = new MyNodeID(netid);
+        muted = false;
+        verbose = false;
     }
 
     public void print_signals(NeighborhoodManager mgr)
@@ -79,28 +81,40 @@ public class SimulatorNode : Object
             (o) => {
                 MyNodeID other = o as MyNodeID;
                 if (other == null) return;
-                print(@"Manager for node $(id.id) signals: ");
-                print(@"Collision with netid $(other.netid)\n");
+                print_msg(@"Manager for node $(id.id) signals: ");
+                print_msg(@"Collision with netid $(other.netid)\n");
             }
         );
         mgr.arc_added.connect(
             (arc) => {
-                print(@"Manager for node $(id.id) signals: ");
-                print(@"Added arc with $(arc.i_neighborhood_mac), RTT $(arc.i_neighborhood_cost)\n");
+                print_msg(@"Manager for node $(id.id) signals: ");
+                print_msg(@"Added arc with $(arc.i_neighborhood_mac), RTT $(arc.i_neighborhood_cost)\n");
             }
         );
         mgr.arc_removed.connect(
             (arc) => {
-                print(@"Manager for node $(id.id) signals: ");
-                print(@"Removed arc with $(arc.i_neighborhood_mac)\n");
+                print_msg(@"Manager for node $(id.id) signals: ");
+                print_msg(@"Removed arc with $(arc.i_neighborhood_mac)\n");
             }
         );
         mgr.arc_changed.connect(
             (arc) => {
-                print(@"Manager for node $(id.id) signals: ");
-                print(@"Changed arc with $(arc.i_neighborhood_mac), RTT $(arc.i_neighborhood_cost)\n");
+                print_msg(@"Manager for node $(id.id) signals: ");
+                print_msg(@"Changed arc with $(arc.i_neighborhood_mac), RTT $(arc.i_neighborhood_cost)\n");
             }
         );
+    }
+
+    public bool muted;
+    public void print_msg(string msg)
+    {
+        if (!muted) print(msg);
+    }
+
+    public bool verbose;
+    public void print_verbose(string msg)
+    {
+        if (!muted && verbose) print(msg);
     }
 
     public class SimulatorDevice : Object
@@ -153,8 +167,10 @@ int main()
     node_a.devices["eth1"] = new SimulatorNode.SimulatorDevice(col_b);
     node_a.devices["eth2"] = new SimulatorNode.SimulatorDevice(null);
     var node_b = new SimulatorNode(1);
+    node_b.muted = true;
     node_b.devices["eth0"] = new SimulatorNode.SimulatorDevice(col_a);
     var node_c = new SimulatorNode(1);
+    node_c.muted = true;
     node_c.devices["eth0"] = new SimulatorNode.SimulatorDevice(col_a);
 
     var node_a_mgr = new NeighborhoodManager(node_a.id, 12, new FakeStubFactory(node_a), new FakeIPRouteManager(node_a));
@@ -264,7 +280,7 @@ public class FakeNic : Object, INeighborhoodNetworkInterface
 
     public long i_neighborhood_get_usec_rtt(uint guid) throws NeighborhoodGetRttError
     {
-        print(@"Device $(_mac) pinging with guid $(guid).\n");
+        //print(@"Device $(_mac) pinging with guid $(guid).\n");
         if (device.collision_domain == null) throw new NeighborhoodGetRttError.GENERIC("No carrier");
         SimulatorCollisionDomain dom = device.collision_domain;
         if (guid in dom.ping_guids)
@@ -277,7 +293,7 @@ public class FakeNic : Object, INeighborhoodNetworkInterface
 
     public void i_neighborhood_prepare_ping(uint guid)
     {
-        print(@"Device $(_mac) willing to answer pings with guid $(guid).\n");
+        //print(@"Device $(_mac) willing to answer pings with guid $(guid).\n");
         if (device.collision_domain == null) return;
         device.collision_domain.ping_guids.add(guid);
     }
@@ -335,16 +351,16 @@ public class FakeBroadcastClient : FakeAddressManager
 	}
 	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
 	{
-	    print(@"sending to broadcast 'here_i_am' from node $(node.id.id) through devs:\n");
-	    foreach (string dev in devs) print(@"        $(dev)\n");
-	    if (bcid.ignore_nodeid != null) print(@"        ignoring node $((bcid.ignore_nodeid as MyNodeID).id)\n");
-	    print(@"        saying:\n");
+	    node.print_verbose(@"sending to broadcast 'here_i_am' from node $(node.id.id) through devs:\n");
+	    foreach (string dev in devs) node.print_verbose(@"        $(dev)\n");
+	    if (bcid.ignore_nodeid != null) node.print_verbose(@"        ignoring node $((bcid.ignore_nodeid as MyNodeID).id)\n");
+	    node.print_verbose(@"        saying:\n");
 	    assert(my_id is MyNodeID);
 	    MyNodeID _my_id = my_id as MyNodeID;
-	    print(@"           my id is $(_my_id.id)\n");
-	    print(@"           my netid is $(_my_id.netid)\n");
-	    print(@"           my mac is $(mac)\n");
-	    print(@"           my nic_addr is $(nic_addr)\n");
+	    node.print_verbose(@"           my id is $(_my_id.id)\n");
+	    node.print_verbose(@"           my netid is $(_my_id.netid)\n");
+	    node.print_verbose(@"           my mac is $(mac)\n");
+	    node.print_verbose(@"           my nic_addr is $(nic_addr)\n");
 	    Gee.List<string>? responding_macs = null;
 	    if (ack_com != null)
 	    {
@@ -456,16 +472,16 @@ public class FakeUnicastClient : FakeAddressManager
     public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
                 throws RPCError
 	{
-	    print(@"sending to unicast 'remove_arc' from node $(node.id.id) through dev $(dev),\n");
-	    if (wait_reply) print(@"        waiting reply,\n");
-	    print(@"        to node $((ucid.nodeid as MyNodeID).id).\n");
-	    print(@"        Saying:\n");
+	    node.print_verbose(@"sending to unicast 'remove_arc' from node $(node.id.id) through dev $(dev),\n");
+	    if (wait_reply) node.print_verbose(@"        waiting reply,\n");
+	    node.print_verbose(@"        to node $((ucid.nodeid as MyNodeID).id).\n");
+	    node.print_verbose(@"        Saying:\n");
 	    assert(my_id is MyNodeID);
 	    MyNodeID _my_id = my_id as MyNodeID;
-	    print(@"           my id is $(_my_id.id)\n");
-	    print(@"           my netid is $(_my_id.netid)\n");
-	    print(@"           my mac is $(mac)\n");
-	    print(@"           my nic_addr is $(nic_addr)\n");
+	    node.print_verbose(@"           my id is $(_my_id.id)\n");
+	    node.print_verbose(@"           my netid is $(_my_id.netid)\n");
+	    node.print_verbose(@"           my mac is $(mac)\n");
+	    node.print_verbose(@"           my nic_addr is $(nic_addr)\n");
 	    if (wait_reply && ! node.devices[dev].working) throw new RPCError.GENERIC("my device not working.");
 	    Channel? reply_ch = null;
 	    if (wait_reply) reply_ch = new Channel();
@@ -546,16 +562,16 @@ public class FakeUnicastClient : FakeAddressManager
     public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
                 throws NeighborhoodRequestArcError, RPCError
 	{
-	    print(@"sending to unicast 'request_arc' from node $(node.id.id) through dev $(dev),\n");
-	    if (wait_reply) print(@"        waiting reply,\n");
-	    print(@"        to node $((ucid.nodeid as MyNodeID).id).\n");
-	    print(@"        Saying:\n");
+	    node.print_verbose(@"sending to unicast 'request_arc' from node $(node.id.id) through dev $(dev),\n");
+	    if (wait_reply) node.print_verbose(@"        waiting reply,\n");
+	    node.print_verbose(@"        to node $((ucid.nodeid as MyNodeID).id).\n");
+	    node.print_verbose(@"        Saying:\n");
 	    assert(my_id is MyNodeID);
 	    MyNodeID _my_id = my_id as MyNodeID;
-	    print(@"           my id is $(_my_id.id)\n");
-	    print(@"           my netid is $(_my_id.netid)\n");
-	    print(@"           my mac is $(mac)\n");
-	    print(@"           my nic_addr is $(nic_addr)\n");
+	    node.print_verbose(@"           my id is $(_my_id.id)\n");
+	    node.print_verbose(@"           my netid is $(_my_id.netid)\n");
+	    node.print_verbose(@"           my mac is $(mac)\n");
+	    node.print_verbose(@"           my nic_addr is $(nic_addr)\n");
 	    if (wait_reply && ! node.devices[dev].working) throw new RPCError.GENERIC("my device not working.");
 	    Channel? reply_ch = null;
 	    if (wait_reply) reply_ch = new Channel();
@@ -679,7 +695,7 @@ public class FakeTCPClient : FakeAddressManager
     public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
                 throws NeighborhoodUnmanagedDeviceError, RPCError
 	{
-	    print(@"sending to $(dest) 'expect_ping($(guid))' from node $(node.id.id).\n");
+	    node.print_verbose(@"sending to $(dest) 'expect_ping($(guid))' from node $(node.id.id).\n");
 	    bool found = false;
 	    SimulatorNode? found_node = null;
 	    SimulatorCollisionDomain? found_dom = null;
@@ -761,7 +777,7 @@ public class FakeIPRouteManager : Object, INeighborhoodIPRouteManager
                         string my_dev
                     )
     {
-        print(@"adding address $(my_addr) to device $(my_dev) of node $(node.id.id).\n");
+        node.print_verbose(@"adding address $(my_addr) to device $(my_dev) of node $(node.id.id).\n");
         assert(my_dev in node.devices.keys);
         SimulatorNode.SimulatorDevice dev = node.devices[my_dev];
         assert(! (my_addr in dev.addresses));
@@ -774,7 +790,7 @@ public class FakeIPRouteManager : Object, INeighborhoodIPRouteManager
                         string neighbor_addr
                     )
     {
-        print(@"adding neighbor $(neighbor_addr) reachable through $(my_dev) which has $(my_addr) of node $(node.id.id).\n");
+        node.print_verbose(@"adding neighbor $(neighbor_addr) reachable through $(my_dev) which has $(my_addr) of node $(node.id.id).\n");
         assert(my_dev in node.devices.keys);
         SimulatorNode.SimulatorDevice dev = node.devices[my_dev];
         assert(my_addr in dev.addresses);
@@ -788,7 +804,7 @@ public class FakeIPRouteManager : Object, INeighborhoodIPRouteManager
                         string neighbor_addr
                     )
     {
-        print(@"removing neighbor $(neighbor_addr) reachable through $(my_dev) which has $(my_addr) of node $(node.id.id).\n");
+        node.print_verbose(@"removing neighbor $(neighbor_addr) reachable through $(my_dev) which has $(my_addr) of node $(node.id.id).\n");
         assert(my_dev in node.devices.keys);
         SimulatorNode.SimulatorDevice dev = node.devices[my_dev];
         assert(my_addr in dev.addresses);
@@ -801,7 +817,7 @@ public class FakeIPRouteManager : Object, INeighborhoodIPRouteManager
                         string my_dev
                     )
     {
-        print(@"removing address $(my_addr) from device $(my_dev) of node $(node.id.id).\n");
+        node.print_verbose(@"removing address $(my_addr) from device $(my_dev) of node $(node.id.id).\n");
         assert(my_dev in node.devices.keys);
         SimulatorNode.SimulatorDevice dev = node.devices[my_dev];
         assert(my_addr in dev.addresses);
