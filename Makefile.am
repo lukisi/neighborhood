@@ -27,7 +27,7 @@ test_neighbours_VALAFLAGS = \
 	--pkg gio-2.0 \
 	--pkg gee-0.8 \
 	--pkg tasklet \
-	--pkg zcd \
+	--pkg oldzcd \
 	--pkg ntkd-rpc\
 	$(NULL)
 
@@ -37,7 +37,7 @@ test_neighbours_CPPFLAGS = \
 	$(GIO_CFLAGS) \
 	$(GEE_CFLAGS) \
 	$(TASKLET_CFLAGS) \
-	$(ZCD_CFLAGS) \
+	$(OLDZCD_CFLAGS) \
 	$(NTKDRPC_CFLAGS) \
 	$(NULL)
 
@@ -46,7 +46,7 @@ test_neighbours_LDADD = \
 	$(GIO_LIBS) \
 	$(GEE_LIBS) \
 	$(TASKLET_LIBS) \
-	$(ZCD_LIBS) \
+	$(OLDZCD_LIBS) \
 	$(NTKDRPC_LIBS) \
 	$(builddir)/libneighborhood.la \
 	$(NULL)
@@ -62,7 +62,7 @@ neighborhoodclient_VALAFLAGS = \
 	--pkg gee-0.8 \
 	--pkg tasklet \
 	--pkg posix \
-	--pkg zcd \
+	--pkg oldzcd \
 	--pkg ntkd-rpc\
 	--pkg linux \
 	$(NULL)
@@ -73,7 +73,7 @@ neighborhoodclient_CPPFLAGS = \
 	$(GIO_CFLAGS) \
 	$(GEE_CFLAGS) \
 	$(TASKLET_CFLAGS) \
-	$(ZCD_CFLAGS) \
+	$(OLDZCD_CFLAGS) \
 	$(NTKDRPC_CFLAGS) \
 	$(NULL)
 
@@ -82,7 +82,7 @@ neighborhoodclient_LDADD = \
 	$(GIO_LIBS) \
 	$(GEE_LIBS) \
 	$(TASKLET_LIBS) \
-	$(ZCD_LIBS) \
+	$(OLDZCD_LIBS) \
 	$(NTKDRPC_LIBS) \
 	$(builddir)/libneighborhood.la \
 	$(NULL)
@@ -98,7 +98,7 @@ libneighborhood_la_VALAFLAGS = \
 	--pkg gee-0.8 \
 	--pkg tasklet \
 	--pkg posix \
-	--pkg zcd \
+	--pkg oldzcd \
 	--pkg ntkd-rpc\
 	--pkg linux \
 	$(NULL)
@@ -109,7 +109,7 @@ libneighborhood_la_CPPFLAGS = \
 	$(GIO_CFLAGS) \
 	$(GEE_CFLAGS) \
 	$(TASKLET_CFLAGS) \
-	$(ZCD_CFLAGS) \
+	$(OLDZCD_CFLAGS) \
 	$(NTKDRPC_CFLAGS) \
 	$(NULL)
 
@@ -118,7 +118,7 @@ libneighborhood_la_LIBADD = \
 	$(GIO_LIBS) \
 	$(GEE_LIBS) \
 	$(TASKLET_LIBS) \
-	$(ZCD_LIBS) \
+	$(OLDZCD_LIBS) \
 	$(NTKDRPC_LIBS) \
 	$(NULL)
 
