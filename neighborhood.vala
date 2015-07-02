@@ -17,12 +17,11 @@
  */
 
 using Gee;
-using zcd;
-using Tasklets;
+using Netsukuku.ModRpc;
 
 namespace Netsukuku
 {
-    // in ntkd-rpc  INeighborhoodNodeID
+    // in ntkdrpc  INeighborhoodNodeID
 
     public errordomain NeighborhoodGetRttError {
         GENERIC
@@ -32,8 +31,10 @@ namespace Netsukuku
     {
         public abstract string i_neighborhood_dev {get;}
         public abstract string i_neighborhood_mac {get;}
-        public abstract long i_neighborhood_get_usec_rtt(uint guid) throws NeighborhoodGetRttError;
-        public abstract void i_neighborhood_prepare_ping(uint guid);
+        public abstract uint16 expect_pong(string s, INtkdChannel ch);
+        public abstract uint16 expect_ping(string s, uint16 peer_port);
+        public abstract long send_ping(string s, uint16 peer_port, INtkdChannel ch) throws NeighborhoodGetRttError;
+        public abstract long measure_rtt(string peer_addr, string peer_mac, string my_addr) throws NeighborhoodGetRttError;
     }
 
     public interface INeighborhoodArc : Object
@@ -42,7 +43,7 @@ namespace Netsukuku
         public abstract string i_neighborhood_mac {get;}
         public abstract long i_neighborhood_cost {get;}
         public abstract INeighborhoodNetworkInterface i_neighborhood_nic {get;}
-        public abstract bool i_neighborhood_comes_from(zcd.CallerInfo rpc_caller);
+        public abstract bool i_neighborhood_comes_from(zcd.ModRpc.CallerInfo rpc_caller);
     }
 
     internal class NeighborhoodRealArc : Object, INeighborhoodArc
@@ -87,9 +88,21 @@ namespace Netsukuku
         /* Public interface INeighborhoodArc
          */
 
-        public bool i_neighborhood_comes_from(zcd.CallerInfo rpc_caller)
+        public bool i_neighborhood_comes_from(zcd.ModRpc.CallerInfo rpc_caller)
         {
-            return _nic_addr == rpc_caller.caller_ip;
+            if (rpc_caller is ModRpc.UnicastCallerInfo)
+            {
+                return _nic_addr == (rpc_caller as ModRpc.UnicastCallerInfo).peer_address;
+            }
+            else if (rpc_caller is ModRpc.BroadcastCallerInfo)
+            {
+                return _nic_addr == (rpc_caller as ModRpc.BroadcastCallerInfo).peer_address;
+            }
+            else if (rpc_caller is zcd.ModRpc.TcpCallerInfo)
+            {
+                return _nic_addr == (rpc_caller as zcd.ModRpc.TcpCallerInfo).peer_address;
+            }
+            else return false;
         }
 
         public INeighborhoodNodeID i_neighborhood_neighbour_id {
@@ -127,18 +140,18 @@ namespace Netsukuku
      */
     public interface INeighborhoodStubFactory : Object
     {
-        public abstract IAddressManagerRootDispatcher
+        public abstract IAddressManagerStub
                         i_neighborhood_get_broadcast(
                             BroadcastID bcid,
                             Gee.Collection<string> devs,
-                            IAcknowledgementsCommunicator? ack_com=null
+                            zcd.ModRpc.IAckCommunicator? ack_com=null
                         );
 
-        public  IAddressManagerRootDispatcher
+        public  IAddressManagerStub
                 i_neighborhood_get_broadcast_to_dev(
                     BroadcastID bcid,
                     string dev,
-                    IAcknowledgementsCommunicator? ack_com=null
+                    zcd.ModRpc.IAckCommunicator? ack_com=null
                 )
         {
             var _devs = new ArrayList<string>();
@@ -146,14 +159,14 @@ namespace Netsukuku
             return i_neighborhood_get_broadcast(bcid, _devs, ack_com);
         }
 
-        public abstract IAddressManagerRootDispatcher
+        public abstract IAddressManagerStub
                         i_neighborhood_get_unicast(
                             UnicastID ucid,
                             string dev,
                             bool wait_reply=true
                         );
 
-        public abstract IAddressManagerRootDispatcher
+        public abstract IAddressManagerStub
                         i_neighborhood_get_tcp(
                             string dest,
                             bool wait_reply=true
@@ -190,12 +203,14 @@ namespace Netsukuku
                         );
     }
 
-    public class NeighborhoodManager : Object, INeighborhoodManager
+    internal INtkdTasklet tasklet;
+    public class NeighborhoodManager : Object, INeighborhoodManagerSkeleton
     {
-        public static void init()
+        public static void init(INtkdTasklet _tasklet)
         {
             // Register serializable types internal to the module.
             // typeof(Xxx).class_peek();
+            tasklet = _tasklet;
         }
 
         public NeighborhoodManager(INeighborhoodNodeID my_id,
@@ -209,9 +224,9 @@ namespace Netsukuku
             this.ip_mgr = ip_mgr;
             nics = new HashMap<string, INeighborhoodNetworkInterface>();
             local_addresses = new HashMap<string, string>();
-            monitoring_devs = new HashMap<string, Tasklet>();
+            monitoring_devs = new HashMap<string, INtkdTaskletHandle>();
             arcs = new ArrayList<NeighborhoodRealArc>();
-            monitoring_arcs = new HashMap<NeighborhoodRealArc, Tasklet>();
+            monitoring_arcs = new HashMap<NeighborhoodRealArc, INtkdTaskletHandle>();
         }
 
         private INeighborhoodNodeID my_id;
@@ -220,9 +235,9 @@ namespace Netsukuku
         private INeighborhoodIPRouteManager ip_mgr;
         private HashMap<string, INeighborhoodNetworkInterface> nics;
         private HashMap<string, string> local_addresses;
-        private HashMap<string, Tasklet> monitoring_devs;
+        private HashMap<string, INtkdTaskletHandle> monitoring_devs;
         private ArrayList<NeighborhoodRealArc> arcs;
-        private HashMap<NeighborhoodRealArc, Tasklet> monitoring_arcs;
+        private HashMap<NeighborhoodRealArc, INtkdTaskletHandle> monitoring_arcs;
 
         // Signals:
         // Network collision detected.
@@ -251,13 +266,11 @@ namespace Netsukuku
             string local_address = @"169.254.$(i2).$(i3)";
             ip_mgr.i_neighborhood_add_address(local_address, dev);
             // start monitor
-            Tasklet t = Tasklet.tasklet_callback(
-                (t_nic, t_local_address) => {
-                    monitor_run(t_nic as INeighborhoodNetworkInterface,
-                                (t_local_address as SerializableString).s);
-                },
-                nic,
-                new SerializableString(local_address));
+            MonitorRunTasklet ts = new MonitorRunTasklet();
+            ts.mgr = this;
+            ts.nic = nic;
+            ts.local_address = local_address;
+            INtkdTaskletHandle t = tasklet.spawn(ts);
             // private members
             monitoring_devs[dev] = t;
             nics[dev] = nic;
@@ -278,7 +291,7 @@ namespace Netsukuku
                 remove_my_arc(arc);
             }
             // stop monitor
-            monitoring_devs[dev].abort();
+            monitoring_devs[dev].kill();
             // remove local address
             string local_address = local_addresses[dev];
             ip_mgr.i_neighborhood_remove_address(local_address, dev);
@@ -313,24 +326,31 @@ namespace Netsukuku
 
         /* Runs in a tasklet foreach device
          */
-        private void monitor_run(INeighborhoodNetworkInterface nic, string local_address)
+        private class MonitorRunTasklet : Object, INtkdTaskletSpawnable
         {
-            while (true)
+            public NeighborhoodManager mgr;
+            public INeighborhoodNetworkInterface nic;
+            public string local_address;
+            public void * func()
             {
-                try
+                while (true)
                 {
-                    IAddressManagerRootDispatcher bc =
-                        get_stub_broadcast_to_dev(nic.i_neighborhood_dev);
-                        // nothing to do for missing ACK from known neighbours
-                        // because this message would be not important for them anyway.
-                    bc.neighborhood_manager.here_i_am(my_id, nic.i_neighborhood_mac, local_address);
+                    try
+                    {
+                        IAddressManagerStub bc =
+                            mgr.get_stub_broadcast_to_dev(nic.i_neighborhood_dev);
+                            // nothing to do for missing ACK from known neighbours
+                            // because this message would be not important for them anyway.
+                        bc.neighborhood_manager.here_i_am(mgr.my_id, nic.i_neighborhood_mac, local_address);
+                    } catch (zcd.ModRpc.StubError e) {
+                        warning("Neighborhood.monitor_run: " +
+                        @"StubError '$(e.message)' while sending in broadcast to $(nic.i_neighborhood_mac).");
+                    } catch (zcd.ModRpc.DeserializeError e) {
+                        warning("Neighborhood.monitor_run: " +
+                        @"DeserializeError '$(e.message)' while sending in broadcast to $(nic.i_neighborhood_mac).");
+                    }
+                    tasklet.ms_wait(60000);
                 }
-                catch (RPCError e)
-                {
-                    log_warn("Neighborhood.monitor_run: " +
-                    @"Error '$(e.message)' while sending in broadcast to $(nic.i_neighborhood_mac).");
-                }
-                Tasklet.nap(60, 0);
             }
         }
 
@@ -355,41 +375,70 @@ namespace Netsukuku
 
         private void start_arc_monitor(NeighborhoodRealArc arc)
         {
-            Tasklet t = Tasklet.tasklet_callback(
-                (t_arc) => {
-                    arc_monitor_run(t_arc as NeighborhoodRealArc);
-                },
-                arc);
+            ArcMonitorRunTasklet ts = new ArcMonitorRunTasklet();
+            ts.mgr = this;
+            ts.arc = arc;
+            INtkdTaskletHandle t = tasklet.spawn(ts);
             monitoring_arcs[arc] = t;
         }
 
         private void stop_arc_monitor(NeighborhoodRealArc arc)
         {
             if (! monitoring_arcs.has_key(arc)) return;
-            monitoring_arcs[arc].abort();
+            monitoring_arcs[arc].kill();
             monitoring_arcs.unset(arc);
         }
 
         /* Runs in a tasklet foreach arc
          */
-        private void arc_monitor_run(NeighborhoodRealArc arc)
+        private class ArcMonitorRunTasklet : Object, INtkdTaskletSpawnable
         {
-            try
+            public NeighborhoodManager mgr;
+            public NeighborhoodRealArc arc;
+            public void * func()
             {
-                long last_rtt = -1;
-                while (true)
+                try
                 {
-                    try
+                    long last_rtt = -1;
+                    while (true)
                     {
-                        // Use a tcp_client to prepare the neighbor.
-                        // It can throw RPCError or NeighborhoodUnmanagedDeviceError.
-                        var tc = get_stub_tcp(arc);
-                        int guid = Random.int_range(0, 1000000);
-                        tc.neighborhood_manager.expect_ping(guid);
-                        Tasklet.nap(1, 0);
-                        // Use the callback saved in the INetworkInterface to get the
-                        // RTT. It can throw NeighborhoodGetRttError.
-                        long rtt = arc.my_nic.i_neighborhood_get_usec_rtt((uint)guid);
+                        long rtt;
+                        try
+                        {
+                            rtt = arc.my_nic.measure_rtt(
+                                arc.nic_addr,
+                                arc.i_neighborhood_mac,
+                                mgr.local_addresses[arc.my_nic.i_neighborhood_dev]);
+                        }
+                        catch (NeighborhoodGetRttError e)
+                        {
+                            // failed getting the RTT.
+                            // Will try with the other method.
+                            try
+                            {
+                                int guid = Random.int_range(1000000, 9999999);
+                                string s_guid = @"$(guid)";
+                                INtkdChannel ch = tasklet.get_channel();
+                                // Use the INeighborhoodNetworkInterface to prepare to
+                                // receive the pong.
+                                uint16 my_port = arc.my_nic.expect_pong(s_guid, ch);
+                                // Use a tcp_client to prepare the neighbor.
+                                // It can throw RPCError or NeighborhoodUnmanagedDeviceError.
+                                IAddressManagerStub tc = mgr.get_stub_tcp(arc);
+                                uint16 peer_port = tc.neighborhood_manager.expect_ping(s_guid, my_port);
+                                // Use the INeighborhoodNetworkInterface to send the ping and get the
+                                // RTT. It can throw NeighborhoodGetRttError.
+                                rtt = arc.my_nic.send_ping(s_guid, peer_port, ch);
+                            }
+                            catch (NeighborhoodGetRttError e)
+                            {
+                                // failed getting the RTT
+                                // Since UDP is not reliable, this is ignorable. Try again soon.
+                                tasklet.ms_wait(1000);
+                                continue;
+                            }
+                        }
+
                         // If all goes right, the arc is still valid and we have the
                         // cost up-to-date.
                         if (last_rtt == -1)
@@ -398,7 +447,7 @@ namespace Netsukuku
                             last_rtt = rtt;
                             arc.set_cost(last_rtt);
                             // signal new arc
-                            arc_added(arc);
+                            mgr.arc_added(arc);
                         }
                         else
                         {
@@ -412,30 +461,28 @@ namespace Netsukuku
                             {
                                 arc.set_cost(last_rtt);
                                 // signal changed arc
-                                arc_changed(arc);
+                                mgr.arc_changed(arc);
                             }
                         }
 
-                        Tasklet.nap(30, 0);
+                        // wait a random from 28 to 30 secs
+                        tasklet.ms_wait(Random.int_range(28000, 30000));
                     }
-                    catch (NeighborhoodGetRttError e)
-                    {
-                        // failed getting the RTT
-                        // Since UDP is not reliable, this is ignorable. Try again soon.
-                        Tasklet.nap(1, 0);
-                    }
+                } catch (zcd.ModRpc.StubError e) {
+                    // failed sending the GUID
+                    // Since it was sent via TCP this arc is not working.
+                    mgr.remove_my_arc(arc);
+                } catch (zcd.ModRpc.DeserializeError e) {
+                    // failed deserialization
+                    warning(@"Call to expect_ping: got DeserializeError: $(e.message)");
+                    // Failed prepare_ping. This arc is not working.
+                    mgr.remove_my_arc(arc);
+                } catch (NeighborhoodUnmanagedDeviceError e) {
+                    debug(@"Call to expect_ping: got NeighborhoodUnmanagedDeviceError: $(e.message)");
+                    // Failed prepare_ping. This arc is not working.
+                    mgr.remove_my_arc(arc);
                 }
-            }
-            catch (RPCError e)
-            {
-                // failed sending the GUID
-                // Since it was sent via TCP this arc is not working.
-                remove_my_arc(arc);
-            }
-            catch (NeighborhoodUnmanagedDeviceError e)
-            {
-                // Failed prepare_ping. This arc is not working.
-                remove_my_arc(arc);
+                return null;
             }
         }
 
@@ -462,7 +509,10 @@ namespace Netsukuku
                         .remove_arc(my_id,
                                    _arc.my_nic.i_neighborhood_mac,
                                    local_addresses[_arc.my_nic.i_neighborhood_dev]);
-                } catch (RPCError e) {}
+                } catch (zcd.ModRpc.StubError e) {
+                } catch (zcd.ModRpc.DeserializeError e) {
+                    warning(@"Call to remove_arc: got DeserializeError: $(e.message)");
+                }
             }
             // signal removed arc
             if (_arc.available) arc_removed(arc);
@@ -482,7 +532,7 @@ namespace Netsukuku
         /* Get a client to call a unicast remote method via TCP
          */
         public
-        IAddressManagerRootDispatcher
+        IAddressManagerStub
         get_stub_tcp(INeighborhoodArc arc, bool wait_reply=true)
         {
             NeighborhoodRealArc _arc = (NeighborhoodRealArc)arc;
@@ -493,7 +543,7 @@ namespace Netsukuku
         /* Get a client to call a unicast remote method via UDP
          */
         private
-        IAddressManagerRootDispatcher
+        IAddressManagerStub
         get_stub_unicast(INeighborhoodArc arc, bool wait_reply=true)
         {
             NeighborhoodRealArc _arc = (NeighborhoodRealArc)arc;
@@ -523,89 +573,64 @@ namespace Netsukuku
         }
 
         /* The instance of this class is created when the stub factory is invoked to
-         * obtain a stub for broadcast. This stub should not be used for more than
-         * one call.
-         * When a remote call is made, immediately the tasklet spawned by the method
-         * 'prepare' will use current_arcs_for_broadcast. Then it will block and
-         * wait for the channel to be ready to send the list of responding MACs.
-         * Finally the tasklet will spawn new tasklets for the missing arc to be
-         * handled by the missing_handler.
+         * obtain a stub for broadcast.
          */
-        class NeighborhoodAcknowledgementsCommunicator : Object, IAcknowledgementsCommunicator
+        private class NeighborhoodAcknowledgementsCommunicator : Object, zcd.ModRpc.IAckCommunicator
         {
             public BroadcastID bcid;
-            public Gee.Collection<string> devs;
+            public Gee.List<string> devs;
             public NeighborhoodManager mgr;
             public INeighborhoodMissingArcHandler missing_handler;
+            public Gee.List<INeighborhoodArc> lst_expected;
 
             public NeighborhoodAcknowledgementsCommunicator(BroadcastID bcid,
                                 Gee.Collection<string> devs,
                                 NeighborhoodManager mgr,
-                                INeighborhoodMissingArcHandler missing_handler)
+                                INeighborhoodMissingArcHandler missing_handler,
+                                Gee.List<INeighborhoodArc> lst_expected)
             {
                 this.bcid = bcid;
-                this.devs = devs;
+                this.devs = new ArrayList<string>();
+                this.devs.add_all(devs);
                 this.mgr = mgr;
                 this.missing_handler = missing_handler;
+                this.lst_expected = new ArrayList<INeighborhoodArc>();
+                this.lst_expected.add_all(lst_expected);
             }
 
-            public Channel prepare()
+            public void process_macs_list(Gee.List<string> responding_macs)
             {
-                Channel ch = new Channel();
-                Tasklet.tasklet_callback(
-                    (t_ack_comm, t_ch) => {
-                        NeighborhoodAcknowledgementsCommunicator ack_comm = (NeighborhoodAcknowledgementsCommunicator)t_ack_comm;
-                        ack_comm.gather_acks((Channel)t_ch);
-                    },
-                    this,
-                    ch
-                );
-                return ch;
-            }
-
-            /* Gather ACKs from expected receivers of a broadcast message
-             */
-            void
-            gather_acks(Channel ch)
-            {
-                // prepare a list of expected receivers.
-                var lst_expected1 = mgr.current_arcs_for_broadcast(bcid, devs);
-                // Wait for the timeout and receive from the channel the list of ACKs.
-                Value v = ch.recv();
-                Gee.List<string> responding_macs = (Gee.List<string>)v;
                 // intersect with current ones now
-                var lst_expected2 = mgr.current_arcs_for_broadcast(bcid, devs);
-                Gee.List<INeighborhoodArc> lst_expected = new ArrayList<INeighborhoodArc>();
-                foreach (var el in lst_expected1)
-                    if (el in lst_expected2)
-                        lst_expected.add(el);
+                Gee.List<INeighborhoodArc> lst_expected_now = mgr.current_arcs_for_broadcast(bcid, devs);
+                Gee.List<INeighborhoodArc> lst_expected_intersect = new ArrayList<INeighborhoodArc>();
+                foreach (var el in lst_expected)
+                    if (el in lst_expected_now)
+                        lst_expected_intersect.add(el);
+                lst_expected = lst_expected_intersect;
                 // prepare a list of missed arcs.
                 var lst_missed = new ArrayList<INeighborhoodArc>();
                 foreach (INeighborhoodArc expected in lst_expected)
-                {
-                    bool has_responded = false;
-                    foreach (string responding_mac in responding_macs)
-                    {
-                        if (expected.i_neighborhood_mac == responding_mac)
-                        {
-                            has_responded = true;
-                            break;
-                        }
-                    }
-                    if (! has_responded) lst_missed.add(expected);
-                }
+                    if (! (expected.i_neighborhood_mac in responding_macs))
+                        lst_missed.add(expected);
                 // foreach missed arc launch in a tasklet
                 // the 'missing' callback.
                 foreach (INeighborhoodArc missed in lst_missed)
                 {
-                    Tasklet.tasklet_callback(
-                        (t_ack_comm, t_missed) => {
-                            NeighborhoodAcknowledgementsCommunicator ack_comm = (NeighborhoodAcknowledgementsCommunicator)t_ack_comm;
-                            ack_comm.missing_handler.i_neighborhood_missing((INeighborhoodArc)t_missed);
-                        },
-                        this,
-                        missed
-                    );
+                    ActOnMissingTasklet ts = new ActOnMissingTasklet();
+                    ts.missing_handler = missing_handler;
+                    ts.missed = missed;
+                    tasklet.spawn(ts);
+                }
+            }
+
+            private class ActOnMissingTasklet : Object, INtkdTaskletSpawnable
+            {
+                public INeighborhoodMissingArcHandler missing_handler;
+                public INeighborhoodArc missed;
+                public void * func()
+                {
+                    missing_handler.i_neighborhood_missing(missed);
+                    return null;
                 }
             }
         }
@@ -613,56 +638,64 @@ namespace Netsukuku
         /* Get a client to call a broadcast remote method
          */
         public
-        IAddressManagerRootDispatcher
+        IAddressManagerStub
         get_stub_broadcast(INeighborhoodMissingArcHandler? missing_handler=null,
                       INeighborhoodNodeID? ignore_neighbour=null)
         {
             var bcid = new BroadcastID(ignore_neighbour);
-            IAddressManagerRootDispatcher ret;
+            IAddressManagerStub ret;
             if (missing_handler == null)
                 ret = stub_factory.i_neighborhood_get_broadcast(bcid, nics.keys);
             else
+            {
+                Gee.List<INeighborhoodArc> lst_expected = current_arcs_for_broadcast(bcid, nics.keys);
                 ret = stub_factory.i_neighborhood_get_broadcast(bcid, nics.keys,
-                         new NeighborhoodAcknowledgementsCommunicator(bcid, nics.keys, this, missing_handler));
+                         new NeighborhoodAcknowledgementsCommunicator(bcid, nics.keys, this, missing_handler, lst_expected));
+            }
             return ret;
         }
 
         /* Get a client to call a broadcast remote method to one nic
          */
         public
-        IAddressManagerRootDispatcher
+        IAddressManagerStub
         get_stub_broadcast_to_dev(string dev,
                              INeighborhoodMissingArcHandler? missing_handler=null,
                              INeighborhoodNodeID? ignore_neighbour=null)
         {
             var bcid = new BroadcastID(ignore_neighbour);
-            IAddressManagerRootDispatcher ret;
+            IAddressManagerStub ret;
             if (missing_handler == null)
                 ret = stub_factory.i_neighborhood_get_broadcast_to_dev(bcid, dev);
             else
+            {
+                Gee.List<string> devs = new ArrayList<string>();
+                devs.add(dev);
+                Gee.List<INeighborhoodArc> lst_expected = current_arcs_for_broadcast(bcid, devs);
                 ret = stub_factory.i_neighborhood_get_broadcast_to_dev(bcid, dev,
-                         new NeighborhoodAcknowledgementsCommunicator(bcid, nics.keys, this, missing_handler));
+                         new NeighborhoodAcknowledgementsCommunicator(bcid, devs, this, missing_handler, lst_expected));
+            }
             return ret;
         }
 
         /* Remotable methods
          */
 
-        public void here_i_am(INeighborhoodNodeID its_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller=null)
+        public void here_i_am(INeighborhoodNodeID its_id, string mac, string nic_addr, zcd.ModRpc.CallerInfo? _rpc_caller=null)
         {
             assert(_rpc_caller != null);
-            CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
-            // This call has to be made in UDP, else ignore it.
-            if (rpc_caller.my_dev == null) return;
-            // This is called in broadcast. Maybe it's me.
+            // This call has to be made in UDP broadcast, else ignore it.
+            if (! (_rpc_caller is BroadcastCallerInfo)) return;
+            BroadcastCallerInfo rpc_caller = (BroadcastCallerInfo)_rpc_caller;
+            // This is called in broadcast. Maybe it's me. It should not be the case.
             if (its_id.i_neighborhood_equals(my_id)) return;
             // It's a neighbour. The message comes from my_nic and its mac is mac.
-            string my_dev = rpc_caller.my_dev;
+            string my_dev = rpc_caller.dev;
             INeighborhoodNetworkInterface? my_nic
                     = get_monitoring_interface_from_dev(my_dev);
             if (my_nic == null)
             {
-                log_warn(@"Neighborhood.here_i_am: $(my_dev) is not being monitored");
+                warning(@"Neighborhood.here_i_am: $(my_dev) is not being monitored");
                 return;
             }
             // Did I already meet it? Did I already make an arc?
@@ -721,8 +754,14 @@ namespace Netsukuku
                 // arc refused
                 refused = true;
             }
-            catch (RPCError e)
+            catch (zcd.ModRpc.StubError e)
             {
+                // failed
+                failed = true;
+            }
+            catch (zcd.ModRpc.DeserializeError e)
+            {
+                warning(@"Call to request_arc: got DeserializeError: $(e.message)");
                 // failed
                 failed = true;
             }
@@ -742,21 +781,23 @@ namespace Netsukuku
         }
 
         public void request_arc(INeighborhoodNodeID its_id, string mac, string nic_addr,
-                                zcd.CallerInfo? _rpc_caller=null) throws NeighborhoodRequestArcError
+                                zcd.ModRpc.CallerInfo? _rpc_caller=null) throws NeighborhoodRequestArcError
         {
+            debug("request_arc: start");
             assert(_rpc_caller != null);
-            CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
-            // This call has to be made in UDP, else ignore it.
-            if (rpc_caller.my_dev == null) return;
+            // This call has to be made in UDP unicast, else ignore it.
+            if (! (_rpc_caller is UnicastCallerInfo)) return;
+            UnicastCallerInfo rpc_caller = (UnicastCallerInfo)_rpc_caller;
             // The message comes from my_nic and its mac is mac.
             // TODO check that nic_addr is in 169.254.0.0/10 class.
             // TODO check that nic_addr is not conflicting with mine or my neighbors' ones.
-            string my_dev = rpc_caller.my_dev;
+            string my_dev = rpc_caller.dev;
+            debug(@"request_arc: through $(my_dev)");
             INeighborhoodNetworkInterface? my_nic
                     = get_monitoring_interface_from_dev(my_dev);
             if (my_nic == null)
             {
-                log_warn(@"Neighborhood.request_arc: $(my_dev) is not being monitored");
+                warning(@"Neighborhood.request_arc: $(my_dev) is not being monitored");
                 return;
             }
             // Did I already make an arc?
@@ -768,7 +809,7 @@ namespace Netsukuku
                     if (arc.i_neighborhood_mac == mac && arc.my_nic == my_nic)
                     {
                         // I already made this arc. Confirm arc.
-                        log_warn("Neighborhood.request_arc: " +
+                        warning("Neighborhood.request_arc: " +
                         @"Already got $(mac) on $(my_nic.i_neighborhood_mac)");
                         return;
                     }
@@ -809,57 +850,64 @@ namespace Netsukuku
             start_arc_monitor(new_arc);
         }
 
-        public void expect_ping(int guid,
-                                zcd.CallerInfo? _rpc_caller=null) throws NeighborhoodUnmanagedDeviceError
+        public uint16 expect_ping(string guid, uint16 peer_port,
+                                  zcd.ModRpc.CallerInfo? _rpc_caller=null) throws NeighborhoodUnmanagedDeviceError
         {
             assert(_rpc_caller != null);
-            CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
-            // The message comes from my_nic.
+            // This call accepts UDP unicast and TCP, else ignore it.
             INeighborhoodNetworkInterface my_nic = null;
             string search_term;
-            if (rpc_caller.my_dev != null)
+            if (_rpc_caller is ModRpc.BroadcastCallerInfo)
             {
-                search_term = @"dev $(rpc_caller.my_dev)";
-                my_nic = get_monitoring_interface_from_dev(rpc_caller.my_dev);
+                string msg = "not answering to broadcast";
+                warning(@"Neighborhood.expect_ping: $(msg)");
+                throw new NeighborhoodUnmanagedDeviceError.GENERIC(msg);
+            }
+            if (_rpc_caller is ModRpc.UnicastCallerInfo)
+            {
+                ModRpc.UnicastCallerInfo rpc_caller = (ModRpc.UnicastCallerInfo)_rpc_caller;
+                search_term = @"dev $(rpc_caller.dev)";
+                my_nic = get_monitoring_interface_from_dev(rpc_caller.dev);
+            }
+            else if (_rpc_caller is zcd.ModRpc.TcpCallerInfo)
+            {
+                zcd.ModRpc.TcpCallerInfo rpc_caller = (zcd.ModRpc.TcpCallerInfo)_rpc_caller;
+                search_term = @"addr $(rpc_caller.my_address)";
+                my_nic = get_monitoring_interface_from_localaddr(rpc_caller.my_address);
             }
             else
             {
-                search_term = @"addr $(rpc_caller.my_ip)";
-                my_nic = get_monitoring_interface_from_localaddr(rpc_caller.my_ip);
+                string msg = @"not answering to $(_rpc_caller.get_type().name())";
+                warning(@"Neighborhood.expect_ping: $(msg)");
+                throw new NeighborhoodUnmanagedDeviceError.GENERIC(msg);
             }
+            // The message comes from my_nic.
             if (my_nic == null)
             {
                 string msg = @"not found handled interface for $(search_term)";
-                log_warn(@"Neighborhood.expect_ping: $(msg)");
+                warning(@"Neighborhood.expect_ping: $(msg)");
                 throw new NeighborhoodUnmanagedDeviceError.GENERIC(msg);
             }
-            // Use the callback saved in the INetworkInterface to prepare to
+            // Use the INeighborhoodNetworkInterface to prepare to
             // receive the ping.
-            my_nic.i_neighborhood_prepare_ping((uint)guid);
+            return my_nic.expect_ping(guid, peer_port);
         }
 
         public void remove_arc(INeighborhoodNodeID its_id, string mac, string nic_addr,
-                                zcd.CallerInfo? _rpc_caller=null)
+                                zcd.ModRpc.CallerInfo? _rpc_caller=null)
         {
             assert(_rpc_caller != null);
-            CallerInfo rpc_caller = (CallerInfo)_rpc_caller;
+            // This call has to be made in UDP unicast, else ignore it.
+            if (! (_rpc_caller is UnicastCallerInfo)) return;
+            UnicastCallerInfo rpc_caller = (UnicastCallerInfo)_rpc_caller;
             // The message comes from my_nic.
-            INeighborhoodNetworkInterface my_nic = null;
-            string search_term;
-            if (rpc_caller.my_dev != null)
-            {
-                search_term = @"dev $(rpc_caller.my_dev)";
-                my_nic = get_monitoring_interface_from_dev(rpc_caller.my_dev);
-            }
-            else
-            {
-                search_term = @"addr $(rpc_caller.my_ip)";
-                my_nic = get_monitoring_interface_from_localaddr(rpc_caller.my_ip);
-            }
+            string my_dev = rpc_caller.dev;
+            INeighborhoodNetworkInterface? my_nic
+                    = get_monitoring_interface_from_dev(my_dev);
             if (my_nic == null)
             {
-                string msg = @"not found handled interface for $(search_term)";
-                log_warn(@"Neighborhood.remove_arc: $(msg)");
+                string msg = @"not found handled interface for dev $(my_dev)";
+                warning(@"Neighborhood.remove_arc: $(msg)");
                 return;
             }
             // Have I that arc?
@@ -891,11 +939,4 @@ namespace Netsukuku
             stop_monitor_all();
         }
     }
-
-    // Defining extern functions.
-    // Do not make them 'public', because they are not exposed by this
-    // module (convenience library), but instead the module use them
-    // as they are provided by the core app.
-    extern void log_warn(string msg);
 }
-

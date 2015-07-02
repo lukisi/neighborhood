@@ -16,22 +16,13 @@
  *  along with Netsukuku.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using Tasklets;
 using Gee;
-using zcd;
 using Netsukuku;
+using Netsukuku.ModRpc;
+using Tasklets;
+using zcd;
 
-namespace Netsukuku
-{
-    public void    log_debug(string msg)   {print(msg+"\n");}
-    public void    log_trace(string msg)   {print(msg+"\n");}
-    public void  log_verbose(string msg)   {print(msg+"\n");}
-    public void     log_info(string msg)   {print(msg+"\n");}
-    public void   log_notice(string msg)   {print(msg+"\n");}
-    public void     log_warn(string msg)   {print(msg+"\n");}
-    public void    log_error(string msg)   {print(msg+"\n");}
-    public void log_critical(string msg)   {print(msg+"\n");}
-}
+const uint16 ntkd_port = 60269;
 
 bool init_done = false;
 ArrayList<SimulatorCollisionDomain> collision_domains;
@@ -51,14 +42,14 @@ public class SimulatorCollisionDomain : Object
     public bool active;
     public long delay_min;
     public long delay_max;
-    public ArrayList<uint> ping_guids;
+    public ArrayList<string> ping_guids;
     public SimulatorCollisionDomain()
     {
         collision_domains.add(this);
         active = true;
         delay_min = 9700;
         delay_max = 10200;
-        ping_guids = new ArrayList<uint>();
+        ping_guids = new ArrayList<string>();
     }
 }
 
@@ -149,28 +140,26 @@ public class SimulatorNode : Object
 int main()
 {
     init();
-    // init tasklet
-    assert(Tasklet.init());
-    // Initialize rpc library
-    Serializer.init();
-    // Register serializable types from model
-    RpcNtk.init();
-    // Register more serializable types
-    typeof(MyNodeID).class_peek();
-    // Initialize module
-    NeighborhoodManager.init();
+
+    // Initialize tasklet system
+    MyTaskletSystem.init();
+    Netsukuku.INtkdTasklet ntkd_tasklet = MyTaskletSystem.get_ntkd();
+
+    // Pass tasklet system to module neighborhood
+    NeighborhoodManager.init(ntkd_tasklet);
 
     var col_a = new SimulatorCollisionDomain();
     var col_b = new SimulatorCollisionDomain();
     var node_a = new SimulatorNode(1);
+    //node_a.verbose = true;
     node_a.devices["eth0"] = new SimulatorNode.SimulatorDevice(col_a);
     node_a.devices["eth1"] = new SimulatorNode.SimulatorDevice(col_b);
     node_a.devices["eth2"] = new SimulatorNode.SimulatorDevice(null);
     var node_b = new SimulatorNode(1);
-    node_b.muted = true;
+    //node_b.verbose = true;
     node_b.devices["eth0"] = new SimulatorNode.SimulatorDevice(col_a);
     var node_c = new SimulatorNode(1);
-    node_c.muted = true;
+    //node_c.verbose = true;
     node_c.devices["eth0"] = new SimulatorNode.SimulatorDevice(col_a);
 
     var node_a_mgr = new NeighborhoodManager(node_a.id, 12, new FakeStubFactory(node_a), new FakeIPRouteManager(node_a));
@@ -204,18 +193,23 @@ int main()
     node_b_mgr.stop_monitor_all();
     ms_wait(100);
 
-    assert(Tasklet.kill());
+    MyTaskletSystem.kill();
     return 0;
 }
 
-public class MyNodeID : Object, ISerializable, INeighborhoodNodeID
+public class MyNodeID : Object, zcd.ModRpc.ISerializable, INeighborhoodNodeID
 {
-    public int id {get; private set;}
-    public int netid {get; private set;}
+    public int id {get; set;}
+    public int netid {get; set;}
     public MyNodeID(int netid)
     {
-        id = Random.int_range(0, int.MAX);
+        id = Random.int_range(1, int.MAX);
         this.netid = netid;
+    }
+
+    public bool check_deserialization()
+    {
+        return id != 0 && netid != 0;
     }
 
     public bool i_neighborhood_equals(INeighborhoodNodeID other)
@@ -228,22 +222,6 @@ public class MyNodeID : Object, ISerializable, INeighborhoodNodeID
     {
         if (!(other is MyNodeID)) return false;
         return netid == (other as MyNodeID).netid;
-    }
-
-    public Variant serialize_to_variant()
-    {
-        Variant v0 = Serializer.int_to_variant(id);
-        Variant v1 = Serializer.int_to_variant(netid);
-        Variant vret = Serializer.tuple_to_variant(v0, v1);
-        return vret;
-    }
-    public void deserialize_from_variant(Variant v) throws SerializerError
-    {
-        Variant v0;
-        Variant v1;
-        Serializer.variant_to_tuple(v, out v0, out v1);
-        id = Serializer.variant_to_int(v0);
-        netid = Serializer.variant_to_int(v1);
     }
 }
 
@@ -278,39 +256,51 @@ public class FakeNic : Object, INeighborhoodNetworkInterface
         }
     }
 
-    public long i_neighborhood_get_usec_rtt(uint guid) throws NeighborhoodGetRttError
+    public uint16 expect_pong(string s, INtkdChannel ch)
+    {
+        return 12345;
+    }
+
+    public uint16 expect_ping(string s, uint16 peer_port)
+    {
+        //print(@"Device $(_mac) willing to answer pings with guid $(guid).\n");
+        if (device.collision_domain == null) return 12345;
+        device.collision_domain.ping_guids.add(s);
+        return 12345;
+
+    }
+
+    public long send_ping(string s, uint16 peer_port, INtkdChannel ch) throws NeighborhoodGetRttError
     {
         //print(@"Device $(_mac) pinging with guid $(guid).\n");
         if (device.collision_domain == null) throw new NeighborhoodGetRttError.GENERIC("No carrier");
         SimulatorCollisionDomain dom = device.collision_domain;
-        if (guid in dom.ping_guids)
+        if (s in dom.ping_guids)
         {
-            dom.ping_guids.remove(guid);
+            dom.ping_guids.remove(s);
             return Random.int_range((int32)dom.delay_min, (int32)dom.delay_max);
         }
         throw new NeighborhoodGetRttError.GENERIC("No recv");
     }
 
-    public void i_neighborhood_prepare_ping(uint guid)
+    public long measure_rtt(string peer_addr, string peer_mac, string my_addr) throws NeighborhoodGetRttError
     {
-        //print(@"Device $(_mac) willing to answer pings with guid $(guid).\n");
-        if (device.collision_domain == null) return;
-        device.collision_domain.ping_guids.add(guid);
+        throw new NeighborhoodGetRttError.GENERIC("Alternative method not implemented");
     }
 }
 
-public class FakeBroadcastClient : FakeAddressManager
+public class FakeBroadcastClient : FakeAddressManagerStub
 {
     public BroadcastID bcid;
     public Gee.Collection<string> devs;
-    public IAcknowledgementsCommunicator? ack_com;
+    public zcd.ModRpc.IAckCommunicator? ack_com;
     public SimulatorNode node;
 
     public FakeBroadcastClient(
                         SimulatorNode node,
                         BroadcastID bcid,
                         Gee.Collection<string> devs,
-                        IAcknowledgementsCommunicator? ack_com)
+                        zcd.ModRpc.IAckCommunicator? ack_com)
     {
         this.node = node;
         this.bcid = bcid;
@@ -318,19 +308,20 @@ public class FakeBroadcastClient : FakeAddressManager
         this.ack_com = ack_com;
     }
 
-    public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
+    public override uint16 expect_ping
+	(string guid, uint16 peer_port)
     {
         // never called in broadcast
         assert_not_reached();
     }
 
-    public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
+    public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr)
     {
         // never called in broadcast
         assert_not_reached();
     }
 
-    public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
+    public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr)
     {
         // never called in broadcast
         assert_not_reached();
@@ -349,7 +340,7 @@ public class FakeBroadcastClient : FakeAddressManager
         public string callee_dev;
         public SimulatorNode callee_node;
 	}
-	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
+	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr)
 	{
 	    node.print_verbose(@"sending to broadcast 'here_i_am' from node $(node.id.id) through devs:\n");
 	    foreach (string dev in devs) node.print_verbose(@"        $(dev)\n");
@@ -364,16 +355,16 @@ public class FakeBroadcastClient : FakeAddressManager
 	    Gee.List<string>? responding_macs = null;
 	    if (ack_com != null)
 	    {
-	        Channel ack_comm_ch = ack_com.prepare();
+    	    node.print_verbose(@"           requesting ACK\n");
 	        responding_macs = new ArrayList<string>();
             Tasklet.tasklet_callback(
-                (_ack_comm_ch, _responding_macs) => {
-                    Channel t_ack_comm_ch = (Channel)_ack_comm_ch;
+                (_ack_com, _responding_macs) => {
+                    zcd.ModRpc.IAckCommunicator t_ack_com = (zcd.ModRpc.IAckCommunicator)_ack_com;
                     Gee.List<string> t_responding_macs = (Gee.List<string>)_responding_macs;
                     ms_wait(3000);
-                    t_ack_comm_ch.send_async(t_responding_macs);
+                    t_ack_com.process_macs_list(t_responding_macs);
                 },
-                ack_comm_ch,
+                ack_com,
                 responding_macs);
             // end tasklet body
 	    }
@@ -413,14 +404,16 @@ public class FakeBroadcastClient : FakeAddressManager
 	                                    if (! t_devc.mgr.is_broadcast_for_me(t_call.bcid, t_call.callee_dev)) return;
                                         if (t_call.responding_macs != null)
                                             t_call.responding_macs.add(t_devc.mac);
-	                                    try {
-	                                        MyNodeID t_my_id = (MyNodeID)ISerializable.deserialize(
-	                                            ((MyNodeID)t_call.arg_my_id).serialize());
-	                                        t_devc.mgr.here_i_am(t_my_id,
-	                                                             t_call.arg_mac,
-	                                                             t_call.arg_nic_addr,
-	                                                             new CallerInfo(t_call.caller_ip, null, t_call.callee_dev));
-	                                    } catch (SerializerError e) {}
+                                        // do a deep copy of t_call.arg_my_id, which is a MyNodeID
+                                        Json.Node n = Json.gobject_serialize(t_call.arg_my_id).copy();
+                                        MyNodeID t_my_id = (MyNodeID)Json.gobject_deserialize(typeof(MyNodeID), n);
+                                        var bcinfo = new Netsukuku.ModRpc.BroadcastCallerInfo
+                                                     (t_call.callee_dev, t_call.caller_ip, t_call.bcid);
+	                                    t_call.callee_node.print_verbose(@"node $(t_call.callee_node.id.id): got 'here_i_am' through dev $(t_call.callee_dev)\n");
+                                        t_devc.mgr.here_i_am(t_my_id,
+                                                             t_call.arg_mac,
+                                                             t_call.arg_nic_addr,
+                                                             bcinfo);
 	                                },
 	                                call);
 	                            // end tasklet body
@@ -433,7 +426,7 @@ public class FakeBroadcastClient : FakeAddressManager
 	}
 }
 
-public class FakeUnicastClient : FakeAddressManager
+public class FakeUnicastClient : FakeAddressManagerStub
 {
     public UnicastID ucid;
     public string dev;
@@ -450,7 +443,57 @@ public class FakeUnicastClient : FakeAddressManager
         this.wait_reply = wait_reply;
     }
 
-    public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
+    private void send_reply_error(Channel ch, string domain, string code, string message)
+    {
+        ch.send_async(ReturningValue.ERROR);
+        ch.send_async(domain);
+        ch.send_async(code);
+        ch.send_async(message);
+    }
+
+    private void send_reply_void(Channel ch)
+    {
+        ch.send_async(ReturningValue.VOID);
+    }
+
+    private void send_reply_return(Channel ch, Value ret)
+    {
+        ch.send_async(ReturningValue.RETURN);
+        ch.send_async(ret);
+    }
+
+    private ReturningValue get_reply(Channel ch) throws zcd.ModRpc.StubError
+    {
+        ReturningValue ret = new ReturningValue();
+        try {
+            ret.resp = (string)ch.recv_with_timeout(2000);
+        } catch (ChannelError e) {throw new zcd.ModRpc.StubError.GENERIC("no answer");}
+        if (ret.resp == ReturningValue.ERROR)
+        {
+            ret.domain = (string)ch.recv();
+            ret.code = (string)ch.recv();
+            ret.message = (string)ch.recv();
+        }
+        else if (ret.resp == ReturningValue.RETURN)
+        {
+            ret.ret = ch.recv();
+        }
+        return ret;
+    }
+    private class ReturningValue : Object
+    {
+        public string resp;
+        public string domain;
+        public string code;
+        public string message;
+        public Value ret;
+        public const string RETURN = "return";
+        public const string VOID = "void";
+        public const string ERROR = "error";
+    }
+
+    public override uint16 expect_ping
+	(string guid, uint16 peer_port)
 	{
         // never called in unicast
         assert_not_reached();
@@ -469,8 +512,8 @@ public class FakeUnicastClient : FakeAddressManager
         public string callee_dev;
         public SimulatorNode callee_node;
 	}
-    public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
-                throws RPCError
+    public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr)
+                throws zcd.ModRpc.StubError
 	{
 	    node.print_verbose(@"sending to unicast 'remove_arc' from node $(node.id.id) through dev $(dev),\n");
 	    if (wait_reply) node.print_verbose(@"        waiting reply,\n");
@@ -482,7 +525,7 @@ public class FakeUnicastClient : FakeAddressManager
 	    node.print_verbose(@"           my netid is $(_my_id.netid)\n");
 	    node.print_verbose(@"           my mac is $(mac)\n");
 	    node.print_verbose(@"           my nic_addr is $(nic_addr)\n");
-	    if (wait_reply && ! node.devices[dev].working) throw new RPCError.GENERIC("my device not working.");
+	    if (wait_reply && ! node.devices[dev].working) throw new zcd.ModRpc.StubError.GENERIC("my device not working.");
 	    Channel? reply_ch = null;
 	    if (wait_reply) reply_ch = new Channel();
 	    if (node.devices[dev].working)
@@ -519,15 +562,16 @@ public class FakeUnicastClient : FakeAddressManager
                                             t_call.callee_node.devices[t_call.callee_dev];
 	                                    if ((! t_devc.working) || t_devc.mgr == null) return;
 	                                    if (! t_devc.mgr.is_unicast_for_me(t_call.ucid, t_call.callee_dev)) return;
-	                                    try {
-	                                        MyNodeID t_my_id = (MyNodeID)ISerializable.deserialize(
-	                                            ((MyNodeID)t_call.arg_my_id).serialize());
-                                            t_devc.mgr.remove_arc(t_my_id,
-                                                                   t_call.arg_mac,
-                                                                   t_call.arg_nic_addr,
-                                                                   new CallerInfo(t_call.caller_ip, null, t_call.callee_dev));
-                                            if (t_call.reply_ch != null) t_call.reply_ch.send(new SerializableNone());
-	                                    } catch (SerializerError e) {}
+                                        // do a deep copy of t_call.arg_my_id, which is a MyNodeID
+                                        Json.Node n = Json.gobject_serialize(t_call.arg_my_id).copy();
+                                        MyNodeID t_my_id = (MyNodeID)Json.gobject_deserialize(typeof(MyNodeID), n);
+                                        var ucinfo = new Netsukuku.ModRpc.UnicastCallerInfo
+                                                     (t_call.callee_dev, t_call.caller_ip, t_call.ucid);
+                                        t_devc.mgr.remove_arc(t_my_id,
+                                                               t_call.arg_mac,
+                                                               t_call.arg_nic_addr,
+                                                               ucinfo);
+                                        if (t_call.reply_ch != null) send_reply_void(t_call.reply_ch);
 	                                },
 	                                call);
 	                            // end tasklet body
@@ -537,13 +581,7 @@ public class FakeUnicastClient : FakeAddressManager
 	            }
 	        }
 	    }
-	    if (wait_reply)
-	    {
-	        try {
-	            reply_ch.recv_with_timeout(2000);
-                return; // ok
-	        } catch (ChannelError e) {throw new RPCError.GENERIC("no answer");}
-	    }
+	    if (wait_reply) get_reply(reply_ch);
 	}
 
 	private class UnicastCallRequestArc : Object
@@ -559,8 +597,8 @@ public class FakeUnicastClient : FakeAddressManager
         public string callee_dev;
         public SimulatorNode callee_node;
 	}
-    public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
-                throws NeighborhoodRequestArcError, RPCError
+    public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr)
+                throws NeighborhoodRequestArcError, zcd.ModRpc.StubError
 	{
 	    node.print_verbose(@"sending to unicast 'request_arc' from node $(node.id.id) through dev $(dev),\n");
 	    if (wait_reply) node.print_verbose(@"        waiting reply,\n");
@@ -572,7 +610,7 @@ public class FakeUnicastClient : FakeAddressManager
 	    node.print_verbose(@"           my netid is $(_my_id.netid)\n");
 	    node.print_verbose(@"           my mac is $(mac)\n");
 	    node.print_verbose(@"           my nic_addr is $(nic_addr)\n");
-	    if (wait_reply && ! node.devices[dev].working) throw new RPCError.GENERIC("my device not working.");
+	    if (wait_reply && ! node.devices[dev].working) throw new zcd.ModRpc.StubError.GENERIC("my device not working.");
 	    Channel? reply_ch = null;
 	    if (wait_reply) reply_ch = new Channel();
 	    if (node.devices[dev].working)
@@ -609,33 +647,33 @@ public class FakeUnicastClient : FakeAddressManager
                                             t_call.callee_node.devices[t_call.callee_dev];
 	                                    if ((! t_devc.working) || t_devc.mgr == null) return;
 	                                    if (! t_devc.mgr.is_unicast_for_me(t_call.ucid, t_call.callee_dev)) return;
-	                                    try {
-	                                        MyNodeID t_my_id = (MyNodeID)ISerializable.deserialize(
-	                                            ((MyNodeID)t_call.arg_my_id).serialize());
-	                                        try {
-	                                            t_devc.mgr.request_arc(t_my_id,
-	                                                                   t_call.arg_mac,
-	                                                                   t_call.arg_nic_addr,
-	                                                                   new CallerInfo(t_call.caller_ip, null, t_call.callee_dev));
-	                                            if (t_call.reply_ch != null) t_call.reply_ch.send(new SerializableNone());
-	                                        } catch (NeighborhoodRequestArcError e) {
-	                                            if (t_call.reply_ch != null)
-	                                            {
-                                                    RemotableException re = new RemotableException();
-                                                    re.message = e.message;
-                                                    re.domain = "NeighborhoodRequestArcError";
-                                                    if (e is NeighborhoodRequestArcError.NOT_SAME_NETWORK)
-                                                        re.code = "NOT_SAME_NETWORK";
-                                                    if (e is NeighborhoodRequestArcError.TOO_MANY_ARCS)
-                                                        re.code = "TOO_MANY_ARCS";
-                                                    if (e is NeighborhoodRequestArcError.TWO_ARCS_ON_COLLISION_DOMAIN)
-                                                        re.code = "TWO_ARCS_ON_COLLISION_DOMAIN";
-                                                    if (e is NeighborhoodRequestArcError.GENERIC)
-                                                        re.code = "GENERIC";
-                                                    t_call.reply_ch.send(re);
-	                                            }
-	                                        }
-	                                    } catch (SerializerError e) {}
+                                        // do a deep copy of t_call.arg_my_id, which is a MyNodeID
+                                        Json.Node n = Json.gobject_serialize(t_call.arg_my_id).copy();
+                                        MyNodeID t_my_id = (MyNodeID)Json.gobject_deserialize(typeof(MyNodeID), n);
+                                        var ucinfo = new Netsukuku.ModRpc.UnicastCallerInfo
+                                                     (t_call.callee_dev, t_call.caller_ip, t_call.ucid);
+                                        try {
+                                            t_devc.mgr.request_arc(t_my_id,
+                                                                   t_call.arg_mac,
+                                                                   t_call.arg_nic_addr,
+                                                                   ucinfo);
+                                            if (t_call.reply_ch != null) send_reply_void(t_call.reply_ch);
+                                        } catch (NeighborhoodRequestArcError e) {
+                                            if (t_call.reply_ch != null)
+                                            {
+                                                string message = e.message;
+                                                string domain = "NeighborhoodRequestArcError";
+                                                if (e is NeighborhoodRequestArcError.NOT_SAME_NETWORK)
+                                                    send_reply_error(t_call.reply_ch, domain, "NOT_SAME_NETWORK", message);
+                                                if (e is NeighborhoodRequestArcError.TOO_MANY_ARCS)
+                                                    send_reply_error(t_call.reply_ch, domain, "TOO_MANY_ARCS", message);
+                                                if (e is NeighborhoodRequestArcError.TWO_ARCS_ON_COLLISION_DOMAIN)
+                                                    send_reply_error(t_call.reply_ch, domain, "TWO_ARCS_ON_COLLISION_DOMAIN", message);
+                                                if (e is NeighborhoodRequestArcError.GENERIC)
+                                                    send_reply_error(t_call.reply_ch, domain, "GENERIC", message);
+
+                                            }
+                                        }
 	                                },
 	                                call);
 	                            // end tasklet body
@@ -647,37 +685,34 @@ public class FakeUnicastClient : FakeAddressManager
 	    }
 	    if (wait_reply)
 	    {
-	        try {
-	            ISerializable resp = (ISerializable)reply_ch.recv_with_timeout(2000);
-                if (resp.get_type().is_a(typeof(RemotableException)))
+            ReturningValue ret = get_reply(reply_ch);
+            if (ret.resp == ReturningValue.ERROR)
+            {
+                if (ret.domain == "NeighborhoodRequestArcError")
                 {
-                    RemotableException e = (RemotableException)resp;
-                    if (e.domain == "NeighborhoodRequestArcError")
-                    {
-                        if (e.code == "NOT_SAME_NETWORK")
-                            throw new NeighborhoodRequestArcError.NOT_SAME_NETWORK(e.message);
-                        if (e.code == "TOO_MANY_ARCS")
-                            throw new NeighborhoodRequestArcError.TOO_MANY_ARCS(e.message);
-                        if (e.code == "TWO_ARCS_ON_COLLISION_DOMAIN")
-                            throw new NeighborhoodRequestArcError.TWO_ARCS_ON_COLLISION_DOMAIN(e.message);
-                        if (e.code == "GENERIC")
-                            throw new NeighborhoodRequestArcError.GENERIC(e.message);
-                    }
-                    assert_not_reached();
+                    if (ret.code == "NOT_SAME_NETWORK")
+                        throw new NeighborhoodRequestArcError.NOT_SAME_NETWORK(ret.message);
+                    if (ret.code == "TOO_MANY_ARCS")
+                        throw new NeighborhoodRequestArcError.TOO_MANY_ARCS(ret.message);
+                    if (ret.code == "TWO_ARCS_ON_COLLISION_DOMAIN")
+                        throw new NeighborhoodRequestArcError.TWO_ARCS_ON_COLLISION_DOMAIN(ret.message);
+                    if (ret.code == "GENERIC")
+                        throw new NeighborhoodRequestArcError.GENERIC(ret.message);
                 }
-                return; // ok
-	        } catch (ChannelError e) {throw new RPCError.GENERIC("no answer");}
+                assert_not_reached();
+            }
+            return; // ok
 	    }
 	}
 
-	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
+	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr)
 	{
         // never called in unicast
         assert_not_reached();
 	}
 }
 
-public class FakeTCPClient : FakeAddressManager
+public class FakeTCPClient : FakeAddressManagerStub
 {
     public string dest;
     public bool wait_reply;
@@ -692,8 +727,9 @@ public class FakeTCPClient : FakeAddressManager
         this.wait_reply = wait_reply;
     }
 
-    public override void expect_ping (int guid, zcd.CallerInfo? _rpc_caller = null)
-                throws NeighborhoodUnmanagedDeviceError, RPCError
+    public override uint16 expect_ping
+	(string guid, uint16 peer_port)
+                throws NeighborhoodUnmanagedDeviceError, zcd.ModRpc.StubError
 	{
 	    node.print_verbose(@"sending to $(dest) 'expect_ping($(guid))' from node $(node.id.id).\n");
 	    bool found = false;
@@ -719,7 +755,7 @@ public class FakeTCPClient : FakeAddressManager
 	                            {
 	                                if (dest in other_devc.addresses)
 	                                {
-	                                    if (found) throw new RPCError.GENERIC("conflicting IP");
+	                                    if (found) throw new zcd.ModRpc.StubError.GENERIC("conflicting IP");
 	                                    found = true;
 	                                    found_node = other_node;
 	                                    found_dom = dom;
@@ -737,27 +773,29 @@ public class FakeTCPClient : FakeAddressManager
 	    {
             long delay = Random.int_range((int32)found_dom.delay_min, (int32)found_dom.delay_max);
             ms_wait(delay/1000);
-            if (found_devc.mgr == null) throw new RPCError.GENERIC("no connect");
-            if (found_my_devc.addresses.is_empty) throw new RPCError.GENERIC("no connect");
-            found_devc.mgr.expect_ping(guid, new CallerInfo(found_my_devc.addresses[0], dest, null));
+            if (found_devc.mgr == null) throw new zcd.ModRpc.StubError.GENERIC("no connect");
+            if (found_my_devc.addresses.is_empty) throw new zcd.ModRpc.StubError.GENERIC("no connect");
+            var tcinfo = new zcd.ModRpc.TcpCallerInfo
+                         (dest, found_my_devc.addresses[0]);
+            return found_devc.mgr.expect_ping(guid, peer_port, tcinfo);
         }
-        else throw new RPCError.GENERIC("no connect");
+        else throw new zcd.ModRpc.StubError.GENERIC("no connect");
 	}
 
-    public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
+    public override void remove_arc (INeighborhoodNodeID my_id, string mac, string nic_addr)
 	{
         // never called in tcp
         assert_not_reached();
 	}
 
-    public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
-                throws NeighborhoodRequestArcError, RPCError
+    public override void request_arc (INeighborhoodNodeID my_id, string mac, string nic_addr)
+                throws NeighborhoodRequestArcError, zcd.ModRpc.StubError
 	{
         // never called in tcp
         assert_not_reached();
 	}
 
-	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.CallerInfo? _rpc_caller = null)
+	public override void here_i_am (INeighborhoodNodeID my_id, string mac, string nic_addr)
 	{
         // never called in tcp
         assert_not_reached();
@@ -833,17 +871,17 @@ public class FakeStubFactory: Object, INeighborhoodStubFactory
         this.node = node;
     }
 
-    public IAddressManagerRootDispatcher
+    public IAddressManagerStub
                     i_neighborhood_get_broadcast(
                         BroadcastID bcid,
                         Gee.Collection<string> devs,
-                        IAcknowledgementsCommunicator? ack_com
+                        zcd.ModRpc.IAckCommunicator? ack_com
                     )
     {
         return new FakeBroadcastClient(node, bcid, devs, ack_com);
     }
 
-    public IAddressManagerRootDispatcher
+    public IAddressManagerStub
                     i_neighborhood_get_unicast(
                         UnicastID ucid,
                         string dev,
@@ -853,7 +891,7 @@ public class FakeStubFactory: Object, INeighborhoodStubFactory
         return new FakeUnicastClient(node, ucid, dev, wait_reply);
     }
 
-    public IAddressManagerRootDispatcher
+    public IAddressManagerStub
                     i_neighborhood_get_tcp(
                         string dest,
                         bool wait_reply=true

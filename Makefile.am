@@ -1,11 +1,12 @@
 NULL = 
 ACLOCAL_AMFLAGS = -I m4
 
-EXTRA_LTLIBRARIES = \
+noinst_LTLIBRARIES = \
+	libmacgetter.la \
 	libneighborhood.la \
 	$(NULL)
 
-bin_PROGRAMS =  \
+noinst_PROGRAMS =  \
 	neighborhoodclient \
 	$(NULL)
 
@@ -17,74 +18,15 @@ TESTS = \
 	test_neighbours \
 	$(NULL)
 
-test_neighbours_SOURCES = \
-	testsuites/test_neighbours/test_neighbours.vala \
-	testsuites/test_neighbours/base_dispatcher.vala \
-	neighborhood.vapi \
+libmacgetter_la_SOURCES = \
+	mac-getter/hw.c \
+	mac-getter/hw.h \
 	$(NULL)
 
-test_neighbours_VALAFLAGS = \
-	--pkg gio-2.0 \
-	--pkg gee-0.8 \
-	--pkg tasklet \
-	--pkg oldzcd \
-	--pkg ntkd-rpc\
+libmacgetter_la_CPPFLAGS = \
 	$(NULL)
 
-test_neighbours_CPPFLAGS = \
-	-w \
-	$(GOBJECT_CFLAGS) \
-	$(GIO_CFLAGS) \
-	$(GEE_CFLAGS) \
-	$(TASKLET_CFLAGS) \
-	$(OLDZCD_CFLAGS) \
-	$(NTKDRPC_CFLAGS) \
-	$(NULL)
-
-test_neighbours_LDADD = \
-	$(GOBJECT_LIBS) \
-	$(GIO_LIBS) \
-	$(GEE_LIBS) \
-	$(TASKLET_LIBS) \
-	$(OLDZCD_LIBS) \
-	$(NTKDRPC_LIBS) \
-	$(builddir)/libneighborhood.la \
-	$(NULL)
-
-neighborhoodclient_SOURCES =  \
-	main.vala \
-	base_dispatcher.vala \
-	neighborhood.vapi \
-	$(NULL)
-
-neighborhoodclient_VALAFLAGS = \
-	--pkg gio-2.0 \
-	--pkg gee-0.8 \
-	--pkg tasklet \
-	--pkg posix \
-	--pkg oldzcd \
-	--pkg ntkd-rpc\
-	--pkg linux \
-	$(NULL)
-
-neighborhoodclient_CPPFLAGS = \
-	-w \
-	$(GOBJECT_CFLAGS) \
-	$(GIO_CFLAGS) \
-	$(GEE_CFLAGS) \
-	$(TASKLET_CFLAGS) \
-	$(OLDZCD_CFLAGS) \
-	$(NTKDRPC_CFLAGS) \
-	$(NULL)
-
-neighborhoodclient_LDADD = \
-	$(GOBJECT_LIBS) \
-	$(GIO_LIBS) \
-	$(GEE_LIBS) \
-	$(TASKLET_LIBS) \
-	$(OLDZCD_LIBS) \
-	$(NTKDRPC_LIBS) \
-	$(builddir)/libneighborhood.la \
+libmacgetter_la_LIBADD = \
 	$(NULL)
 
 libneighborhood_la_SOURCES = \
@@ -94,43 +36,97 @@ libneighborhood_la_SOURCES = \
 libneighborhood_la_VALAFLAGS = \
 	-H neighborhood.h \
 	--library neighborhood \
-	--pkg gio-2.0 \
 	--pkg gee-0.8 \
-	--pkg tasklet \
-	--pkg posix \
-	--pkg oldzcd \
-	--pkg ntkd-rpc\
-	--pkg linux \
+	--pkg ntkd-tasklet-system \
+	--pkg ntkdrpc\
+	--pkg zcd-tasklet-system \
 	$(NULL)
 
 libneighborhood_la_CPPFLAGS = \
 	-w \
 	$(GOBJECT_CFLAGS) \
-	$(GIO_CFLAGS) \
 	$(GEE_CFLAGS) \
-	$(TASKLET_CFLAGS) \
-	$(OLDZCD_CFLAGS) \
+	$(TASKLETSYSTEM_CFLAGS) \
 	$(NTKDRPC_CFLAGS) \
 	$(NULL)
 
 libneighborhood_la_LIBADD = \
 	$(GOBJECT_LIBS) \
-	$(GIO_LIBS) \
 	$(GEE_LIBS) \
-	$(TASKLET_LIBS) \
-	$(OLDZCD_LIBS) \
+	$(TASKLETSYSTEM_LIBS) \
 	$(NTKDRPC_LIBS) \
 	$(NULL)
 
-CLEANFILES = \
+neighborhoodclient_SOURCES =  \
+	main.vala \
+	tasklet_system_tasklet.vala \
+	base_fake_address_manager.vala \
+	mac-getter/hw.vapi \
+	neighborhood.vapi \
+	$(NULL)
+
+neighborhoodclient_VALAFLAGS = \
+	--pkg gee-0.8 \
+	--pkg ntkd-tasklet-system \
+	--pkg tasklet \
+	--pkg ntkdrpc \
+	--pkg zcd-tasklet-system \
+	$(NULL)
+
+neighborhoodclient_CPPFLAGS = \
+	-w \
+	$(GOBJECT_CFLAGS) \
+	$(GEE_CFLAGS) \
+	$(TASKLETSYSTEM_CFLAGS) \
+	$(TASKLET_CFLAGS) \
+	$(NTKDRPC_CFLAGS) \
+	$(NULL)
+
+neighborhoodclient_LDADD = \
+	$(GOBJECT_LIBS) \
+	$(GEE_LIBS) \
+	$(TASKLETSYSTEM_LIBS) \
+	$(TASKLET_LIBS) \
+	$(NTKDRPC_LIBS) \
+	$(builddir)/libmacgetter.la \
+	$(builddir)/libneighborhood.la \
+	$(NULL)
+
+test_neighbours_SOURCES = \
+	testsuites/test_neighbours/test_neighbours.vala \
+	testsuites/test_neighbours/base_fake_address_manager.vala \
+	testsuites/test_neighbours/tasklet_system_tasklet.vala \
+	neighborhood.vapi \
+	$(NULL)
+
+test_neighbours_VALAFLAGS = \
+	--pkg gee-0.8 \
+	--pkg ntkd-tasklet-system \
+	--pkg tasklet \
+	--pkg ntkdrpc\
+	--pkg zcd-tasklet-system \
+	$(NULL)
+
+test_neighbours_CPPFLAGS = \
+	-w \
+	$(GOBJECT_CFLAGS) \
+	$(GEE_CFLAGS) \
+	$(TASKLETSYSTEM_CFLAGS) \
+	$(TASKLET_CFLAGS) \
+	$(NTKDRPC_CFLAGS) \
+	$(NULL)
+
+test_neighbours_LDADD = \
+	$(GOBJECT_LIBS) \
+	$(GEE_LIBS) \
+	$(TASKLETSYSTEM_LIBS) \
+	$(TASKLET_LIBS) \
+	$(NTKDRPC_LIBS) \
+	$(builddir)/libneighborhood.la \
+	$(NULL)
+
+MAINTAINERCLEANFILES = \
 	$(srcdir)/neighborhood.vapi \
-	$(srcdir)/neighborhood.h \
-	$(srcdir)/libneighborhood_la_vala.stamp \
-	$(srcdir)/main.c \
-	$(srcdir)/base_dispatcher.c \
-	$(srcdir)/neighborhood.c \
-	$(srcdir)/testsuites/test_neighbours/test_neighbours.c \
-	$(srcdir)/testsuites/test_neighbours/base_dispatcher.c \
 	$(NULL)
 
 neighborhood.vapi: libneighborhood_la_vala.stamp
