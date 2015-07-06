@@ -109,8 +109,9 @@ namespace Netsukuku
                             bool wait_reply
                         )
         {
-            // TODO wait_reply
             var tc = ModRpc.get_addr_tcp_client(dest, ntkd_port);
+            assert(tc is ITcpClientRootStub);
+            ((ITcpClientRootStub)tc).wait_reply = wait_reply;
             return tc;
         }
     }
