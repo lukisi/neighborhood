@@ -21,10 +21,17 @@ using Netsukuku.ModRpc;
 
 public class FakeAddressManagerSkeleton : Object,
                                   IAddressManagerSkeleton,
-                                  INeighborhoodManagerSkeleton
+                                  INeighborhoodManagerSkeleton,
+                                  IQspnManagerSkeleton
 {
 	public virtual unowned INeighborhoodManagerSkeleton
 	neighborhood_manager_getter()
+	{
+	    return this;
+	}
+
+	public virtual unowned IQspnManagerSkeleton
+	qspn_manager_getter()
 	{
 	    return this;
 	}
@@ -54,14 +61,35 @@ public class FakeAddressManagerSkeleton : Object,
     {
         error("FakeAddressManagerSkeleton: you must override method request_arc.");
     }
+
+	public virtual Netsukuku.IQspnEtpMessage get_full_etp
+	(Netsukuku.IQspnAddress requesting_address, zcd.ModRpc.CallerInfo? caller = null)
+	throws Netsukuku.QspnNotAcceptedError, Netsukuku.QspnBootstrapInProgressError
+    {
+        error("FakeAddressManagerSkeleton: you must override method get_full_etp.");
+    }
+
+	public virtual void send_etp
+	(Netsukuku.IQspnEtpMessage etp, bool is_full, zcd.ModRpc.CallerInfo? caller = null)
+	throws Netsukuku.QspnNotAcceptedError
+    {
+        error("FakeAddressManagerSkeleton: you must override method send_etp.");
+    }
 }
 
 public class FakeAddressManagerStub : Object,
                                   IAddressManagerStub,
-                                  INeighborhoodManagerStub
+                                  INeighborhoodManagerStub,
+                                  IQspnManagerStub
 {
 	public virtual unowned INeighborhoodManagerStub
 	neighborhood_manager_getter()
+	{
+	    return this;
+	}
+
+	public virtual unowned IQspnManagerStub
+	qspn_manager_getter()
 	{
 	    return this;
 	}
@@ -92,6 +120,20 @@ public class FakeAddressManagerStub : Object,
 	throws Netsukuku.NeighborhoodRequestArcError, zcd.ModRpc.StubError, zcd.ModRpc.DeserializeError
     {
         error("FakeAddressManagerStub: you must override method request_arc.");
+    }
+
+    public virtual IQspnEtpMessage get_full_etp
+    (Netsukuku.IQspnAddress requesting_address)
+    throws Netsukuku.QspnNotAcceptedError, Netsukuku.QspnBootstrapInProgressError, zcd.ModRpc.StubError, zcd.ModRpc.DeserializeError
+    {
+        error("FakeAddressManagerStub: you must override method get_full_etp.");
+    }
+
+    public virtual void send_etp
+    (Netsukuku.IQspnEtpMessage etp, bool is_full)
+    throws Netsukuku.QspnNotAcceptedError, zcd.ModRpc.StubError, zcd.ModRpc.DeserializeError
+    {
+        error("FakeAddressManagerStub: you must override method send_etp.");
     }
 }
 

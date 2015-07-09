@@ -20,6 +20,7 @@ using Gee;
 using Netsukuku.ModRpc;
 using Tasklets;
 using zcd;
+using zcd.ModRpc;
 
 const uint16 ntkd_port = 60269;
 
