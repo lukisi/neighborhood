@@ -530,15 +530,6 @@ namespace Netsukuku
             // create module neighborhood
             address_manager.neighborhood_manager = new NeighborhoodManager(id, 12, new MyStubFactory(), new MyIPRouteManager());
             // connect signals
-            address_manager.neighborhood_manager.network_collision.connect(
-                (o) => {
-                    MyNodeID other = o as MyNodeID;
-                    if (other == null) return;
-                    Time m = Time.local(time_t());
-                    print(@"$(m) ");
-                    print(@"Collision with netid $(other.netid)\n");
-                }
-            );
             address_manager.neighborhood_manager.arc_added.connect(
                 (arc) => {
                     Time m = Time.local(time_t());

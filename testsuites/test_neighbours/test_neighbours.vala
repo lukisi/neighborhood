@@ -68,14 +68,6 @@ public class SimulatorNode : Object
 
     public void print_signals(NeighborhoodManager mgr)
     {
-        mgr.network_collision.connect(
-            (o) => {
-                MyNodeID other = o as MyNodeID;
-                if (other == null) return;
-                print_msg(@"Manager for node $(id.id) signals: ");
-                print_msg(@"Collision with netid $(other.netid)\n");
-            }
-        );
         mgr.arc_added.connect(
             (arc) => {
                 print_msg(@"Manager for node $(id.id) signals: ");

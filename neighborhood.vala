@@ -240,8 +240,6 @@ namespace Netsukuku
         private HashMap<NeighborhoodRealArc, INtkdTaskletHandle> monitoring_arcs;
 
         // Signals:
-        // Network collision detected.
-        public signal void network_collision(INeighborhoodNodeID other);
         // New arc formed.
         public signal void arc_added(INeighborhoodArc arc);
         // An arc removed.
@@ -409,6 +407,10 @@ namespace Netsukuku
                                 arc.nic_addr,
                                 arc.i_neighborhood_mac,
                                 mgr.local_addresses[arc.my_nic.i_neighborhood_dev]);
+                            // Use a tcp_client to check the neighbor.
+                            // It can throw StubError.
+                            IAddressManagerStub tc = mgr.get_stub_tcp(arc);
+                            tc.neighborhood_manager.nop();
                         }
                         catch (NeighborhoodGetRttError e)
                         {
@@ -423,7 +425,7 @@ namespace Netsukuku
                                 // receive the pong.
                                 uint16 my_port = arc.my_nic.expect_pong(s_guid, ch);
                                 // Use a tcp_client to prepare the neighbor.
-                                // It can throw RPCError or NeighborhoodUnmanagedDeviceError.
+                                // It can throw StubError or NeighborhoodUnmanagedDeviceError.
                                 IAddressManagerStub tc = mgr.get_stub_tcp(arc);
                                 uint16 peer_port = tc.neighborhood_manager.expect_ping(s_guid, my_port);
                                 // Use the INeighborhoodNetworkInterface to send the ping and get the
@@ -469,7 +471,7 @@ namespace Netsukuku
                         tasklet.ms_wait(Random.int_range(28000, 30000));
                     }
                 } catch (zcd.ModRpc.StubError e) {
-                    // failed sending the GUID
+                    // failed sending the GUID (or checking with nop)
                     // Since it was sent via TCP this arc is not working.
                     mgr.remove_my_arc(arc);
                 } catch (zcd.ModRpc.DeserializeError e) {
@@ -719,13 +721,6 @@ namespace Netsukuku
                     continue;
                 }
             }
-            // Is it on my network?
-            if (! its_id.i_neighborhood_is_on_same_network(my_id))
-            {
-                // It's on different network. Emit signal and ignore message.
-                network_collision(its_id);
-                return;
-            }
             // Do I have too many arcs?
             if (arcs.size >= max_arcs)
             {
@@ -824,13 +819,6 @@ namespace Netsukuku
                     continue;
                 }
             }
-            // Is it on my network?
-            if (! its_id.i_neighborhood_is_on_same_network(my_id))
-            {
-                // It's on different network. Refuse.
-                throw new NeighborhoodRequestArcError.NOT_SAME_NETWORK(
-                @"Refusing $(mac) because on different network.");
-            }
             // Do I have too many arcs?
             if (arcs.size >= max_arcs)
             {
@@ -922,6 +910,10 @@ namespace Netsukuku
                     break;
                 }
             }
+        }
+
+        public void nop(zcd.ModRpc.CallerInfo? caller = null)
+        {
         }
 
         public void stop_monitor_all()
