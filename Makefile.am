@@ -11,12 +11,14 @@ noinst_LTLIBRARIES = \
 #	$(NULL)
 
 check_PROGRAMS = \
-	test_neighbours \
+	test_serialize_helpers \
 	$(NULL)
+#	test_neighbours
 
 TESTS = \
-	test_neighbours \
+	test_serialize_helpers \
 	$(NULL)
+#	test_neighbours
 
 libmacgetter_la_SOURCES = \
 	mac-getter/hw.c \
@@ -128,6 +130,29 @@ test_neighbours_LDADD = \
 	$(NTKDCOMMON_LIBS) \
 	$(NTKDRPC_LIBS) \
 	$(builddir)/libneighborhood.la \
+	$(NULL)
+
+test_serialize_helpers_SOURCES =  \
+	testsuites/test_serialize_helpers/test_serialize_helpers.vala \
+	testsuites/test_serialize_helpers/serialize_helpers.vala \
+	$(NULL)
+
+test_serialize_helpers_VALAFLAGS = \
+	--pkg gee-0.8 \
+	--pkg json-glib-1.0 \
+	$(NULL)
+
+test_serialize_helpers_CPPFLAGS = \
+	-w \
+	$(GOBJECT_CFLAGS) \
+	$(GEE_CFLAGS) \
+	$(JSONGLIB_CFLAGS) \
+	$(NULL)
+
+test_serialize_helpers_LDADD = \
+	$(GOBJECT_LIBS) \
+	$(GEE_LIBS) \
+	$(JSONGLIB_LIBS) \
 	$(NULL)
 
 MAINTAINERCLEANFILES = \
