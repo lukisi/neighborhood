@@ -1,5 +1,6 @@
 m4/*
 neighborhood.c
+serialize_helpers.c
 interfaces.c
 main.c
 base_fake_address_manager.c

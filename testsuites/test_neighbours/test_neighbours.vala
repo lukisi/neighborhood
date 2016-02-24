@@ -18,9 +18,7 @@
 
 using Gee;
 using Netsukuku;
-using Netsukuku.ModRpc;
-using Tasklets;
-using zcd;
+using TaskletSystem;
 
 const uint16 ntkd_port = 60269;
 
@@ -134,11 +132,11 @@ int main()
     init();
 
     // Initialize tasklet system
-    MyTaskletSystem.init();
-    Netsukuku.INtkdTasklet ntkd_tasklet = MyTaskletSystem.get_ntkd();
+    PthTaskletImplementer.init();
+    ITasklet tasklet = PthTaskletImplementer.get_tasklet_system();
 
     // Pass tasklet system to module neighborhood
-    NeighborhoodManager.init(ntkd_tasklet);
+    NeighborhoodManager.init(tasklet);
 
     var col_a = new SimulatorCollisionDomain();
     var col_b = new SimulatorCollisionDomain();
@@ -185,36 +183,8 @@ int main()
     node_b_mgr.stop_monitor_all();
     ms_wait(100);
 
-    MyTaskletSystem.kill();
+    PthTaskletImplementer.kill();
     return 0;
-}
-
-public class MyNodeID : Object, zcd.ModRpc.ISerializable, INeighborhoodNodeID
-{
-    public int id {get; set;}
-    public int netid {get; set;}
-    public MyNodeID(int netid)
-    {
-        id = Random.int_range(1, int.MAX);
-        this.netid = netid;
-    }
-
-    public bool check_deserialization()
-    {
-        return id != 0 && netid != 0;
-    }
-
-    public bool i_neighborhood_equals(INeighborhoodNodeID other)
-    {
-        if (!(other is MyNodeID)) return false;
-        return id == (other as MyNodeID).id;
-    }
-
-    public bool i_neighborhood_is_on_same_network(INeighborhoodNodeID other)
-    {
-        if (!(other is MyNodeID)) return false;
-        return netid == (other as MyNodeID).netid;
-    }
 }
 
 public class FakeNic : Object, INeighborhoodNetworkInterface
@@ -791,6 +761,35 @@ public class FakeTCPClient : FakeAddressManagerStub
 	{
         // never called in tcp
         assert_not_reached();
+	}
+}
+
+public abstract class FakeAddressManagerStub : Object,
+                                  IAddressManagerStub,
+                                  INeighborhoodManagerStub
+{
+	public virtual unowned INeighborhoodManagerStub
+	neighborhood_manager_getter()
+	{
+	    return this;
+	}
+
+	public virtual unowned IQspnManagerStub
+	qspn_manager_getter()
+	{
+	    error("FakeAddressManagerSkeleton: this test should not use method qspn_manager_getter.");
+	}
+
+	public virtual unowned IPeersManagerStub
+	peers_manager_getter()
+	{
+	    error("FakeAddressManagerSkeleton: this test should not use method peers_manager_getter.");
+	}
+
+	public virtual unowned ICoordinatorManagerStub
+	coordinator_manager_getter()
+	{
+	    error("FakeAddressManagerSkeleton: this test should not use method coordinator_manager_getter.");
 	}
 }
 

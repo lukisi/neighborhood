@@ -1,6 +1,6 @@
 /*
  *  This file is part of Netsukuku.
- *  Copyright (C) 2015 Luca Dionisi aka lukisi <luca.dionisi@gmail.com>
+ *  Copyright (C) 2015-2016 Luca Dionisi aka lukisi <luca.dionisi@gmail.com>
  *
  *  Netsukuku is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -46,13 +46,6 @@ public class FakeAddressManagerSkeleton : Object,
 	{
 	    error("FakeAddressManagerSkeleton: this test should not use method coordinator_manager_getter.");
 	}
-
-	public virtual uint16 expect_ping
-	(string guid, uint16 peer_port, zcd.ModRpc.CallerInfo? caller = null)
-	throws Netsukuku.NeighborhoodUnmanagedDeviceError
-    {
-        error("FakeAddressManagerSkeleton: you must override method expect_ping.");
-    }
 
 	public virtual void here_i_am 
 	(Netsukuku.INeighborhoodNodeID my_id, string mac, string nic_addr, zcd.ModRpc.CallerInfo? caller = null)
@@ -107,13 +100,6 @@ public class FakeAddressManagerStub : Object,
 	{
 	    error("FakeAddressManagerSkeleton: this test should not use method coordinator_manager_getter.");
 	}
-
-	public virtual uint16 expect_ping
-	(string guid, uint16 peer_port)
-	throws Netsukuku.NeighborhoodUnmanagedDeviceError, zcd.ModRpc.StubError, zcd.ModRpc.DeserializeError
-    {
-        error("FakeAddressManagerStub: you must override method expect_ping.");
-    }
 
 	public virtual void here_i_am 
 	(Netsukuku.INeighborhoodNodeID my_id, string mac, string nic_addr)

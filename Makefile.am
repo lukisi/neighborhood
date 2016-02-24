@@ -6,9 +6,9 @@ noinst_LTLIBRARIES = \
 	libneighborhood.la \
 	$(NULL)
 
-noinst_PROGRAMS =  \
-	neighborhoodclient \
-	$(NULL)
+#noinst_PROGRAMS =  \
+#	neighborhoodclient \
+#	$(NULL)
 
 check_PROGRAMS = \
 	test_neighbours \
@@ -31,35 +31,40 @@ libmacgetter_la_LIBADD = \
 
 libneighborhood_la_SOURCES = \
 	neighborhood.vala \
+	serialize_helpers.vala \
 	$(NULL)
 
 libneighborhood_la_VALAFLAGS = \
 	-H neighborhood.h \
 	--library neighborhood \
 	--pkg gee-0.8 \
-	--pkg ntkd-tasklet-system \
+	--pkg json-glib-1.0 \
+	--pkg tasklet-system \
+	--pkg ntkd-common \
 	--pkg ntkdrpc\
-	--pkg zcd-tasklet-system \
 	$(NULL)
 
 libneighborhood_la_CPPFLAGS = \
 	-w \
 	$(GOBJECT_CFLAGS) \
 	$(GEE_CFLAGS) \
+	$(JSONGLIB_CFLAGS) \
 	$(TASKLETSYSTEM_CFLAGS) \
+	$(NTKDCOMMON_CFLAGS) \
 	$(NTKDRPC_CFLAGS) \
 	$(NULL)
 
 libneighborhood_la_LIBADD = \
 	$(GOBJECT_LIBS) \
 	$(GEE_LIBS) \
+	$(JSONGLIB_LIBS) \
 	$(TASKLETSYSTEM_LIBS) \
+	$(NTKDCOMMON_LIBS) \
 	$(NTKDRPC_LIBS) \
 	$(NULL)
 
 neighborhoodclient_SOURCES =  \
 	main.vala \
-	tasklet_system_tasklet.vala \
 	base_fake_address_manager.vala \
 	mac-getter/hw.vapi \
 	neighborhood.vapi \
@@ -78,7 +83,7 @@ neighborhoodclient_CPPFLAGS = \
 	$(GOBJECT_CFLAGS) \
 	$(GEE_CFLAGS) \
 	$(TASKLETSYSTEM_CFLAGS) \
-	$(TASKLET_CFLAGS) \
+	$(PTHTASKLET_CFLAGS) \
 	$(NTKDRPC_CFLAGS) \
 	$(NULL)
 
@@ -86,7 +91,7 @@ neighborhoodclient_LDADD = \
 	$(GOBJECT_LIBS) \
 	$(GEE_LIBS) \
 	$(TASKLETSYSTEM_LIBS) \
-	$(TASKLET_LIBS) \
+	$(PTHTASKLET_LIBS) \
 	$(NTKDRPC_LIBS) \
 	$(builddir)/libmacgetter.la \
 	$(builddir)/libneighborhood.la \
@@ -94,17 +99,15 @@ neighborhoodclient_LDADD = \
 
 test_neighbours_SOURCES = \
 	testsuites/test_neighbours/test_neighbours.vala \
-	testsuites/test_neighbours/base_fake_address_manager.vala \
-	testsuites/test_neighbours/tasklet_system_tasklet.vala \
 	neighborhood.vapi \
 	$(NULL)
 
 test_neighbours_VALAFLAGS = \
 	--pkg gee-0.8 \
-	--pkg ntkd-tasklet-system \
-	--pkg tasklet \
+	--pkg tasklet-system \
+	--pkg pth-tasklet \
+	--pkg ntkd-common\
 	--pkg ntkdrpc\
-	--pkg zcd-tasklet-system \
 	$(NULL)
 
 test_neighbours_CPPFLAGS = \
@@ -112,7 +115,8 @@ test_neighbours_CPPFLAGS = \
 	$(GOBJECT_CFLAGS) \
 	$(GEE_CFLAGS) \
 	$(TASKLETSYSTEM_CFLAGS) \
-	$(TASKLET_CFLAGS) \
+	$(PTHTASKLET_CFLAGS) \
+	$(NTKDCOMMON_CFLAGS) \
 	$(NTKDRPC_CFLAGS) \
 	$(NULL)
 
@@ -120,7 +124,8 @@ test_neighbours_LDADD = \
 	$(GOBJECT_LIBS) \
 	$(GEE_LIBS) \
 	$(TASKLETSYSTEM_LIBS) \
-	$(TASKLET_LIBS) \
+	$(PTHTASKLET_LIBS) \
+	$(NTKDCOMMON_LIBS) \
 	$(NTKDRPC_LIBS) \
 	$(builddir)/libneighborhood.la \
 	$(NULL)
