@@ -13,7 +13,7 @@ LT_INIT
 AM_PROG_CC_C_O
 
 dnl Check for vala
-AM_PROG_VALAC([0.10.0])
+AM_PROG_VALAC([0.28.0])
 
 AM_MAINTAINER_MODE([enable])
 
