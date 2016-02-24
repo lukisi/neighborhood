@@ -66,11 +66,7 @@ namespace LibNeighborhoodInternals
         b.set_member_name("typename");
         b.add_string_value(obj.get_type().name());
         b.set_member_name("value");
-        Json.Node * obj_n = Json.gobject_serialize(obj);
-        // json_builder_add_value docs says: The builder will take ownership of the #JsonNode.
-        // but the vapi does not specify that the formal parameter is owned.
-        // So I try and handle myself the unref of obj_n
-        b.add_value(obj_n);
+        b.add_value(Json.gobject_serialize(obj));
         b.end_object();
         return b.get_root();
     }
@@ -103,16 +99,7 @@ namespace LibNeighborhoodInternals
         b.begin_array();
         foreach (Object obj in lst)
         {
-            b.begin_object();
-            b.set_member_name("typename");
-            b.add_string_value(obj.get_type().name());
-            b.set_member_name("value");
-            Json.Node * obj_n = Json.gobject_serialize(obj);
-            // json_builder_add_value docs says: The builder will take ownership of the #JsonNode.
-            // but the vapi does not specify that the formal parameter is owned.
-            // So I try and handle myself the unref of obj_n
-            b.add_value(obj_n);
-            b.end_object();
+            b.add_value(serialize_object(obj));
         }
         b.end_array();
         return b.get_root();
@@ -123,7 +110,7 @@ namespace LibNeighborhoodInternals
     {
         ListDeserializer<NeighborhoodNodeID> c = new ListDeserializer<NeighborhoodNodeID>();
         var first_ret = c.deserialize_list_object(property_node);
-        // N.B. list of NeighborhoodNodeID must be searchable for the qspn module to work.
+        // N.B. list of NeighborhoodNodeID must be searchable for the Neighborhood module to work.
         var ret = new ArrayList<NeighborhoodNodeID>((a, b) => a.equals(b));
         ret.add_all(first_ret);
         return ret;
@@ -139,7 +126,7 @@ namespace LibNeighborhoodInternals
     {
         ListDeserializer<NodeID> c = new ListDeserializer<NodeID>();
         var first_ret = c.deserialize_list_object(property_node);
-        // N.B. list of NeighborhoodNodeID must be searchable for the qspn module to work.
+        // N.B. list of NeighborhoodNodeID must be searchable for the Neighborhood module to work.
         var ret = new ArrayList<NodeID>((a, b) => a.equals(b));
         ret.add_all(first_ret);
         return ret;
