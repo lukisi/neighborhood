@@ -6,9 +6,9 @@ noinst_LTLIBRARIES = \
 	libneighborhood.la \
 	$(NULL)
 
-#noinst_PROGRAMS =  \
-#	neighborhoodclient \
-#	$(NULL)
+noinst_PROGRAMS =  \
+	neighborhoodclient \
+	$(NULL)
 
 check_PROGRAMS = \
 	test_serialize_helpers \
@@ -67,24 +67,26 @@ libneighborhood_la_LIBADD = \
 
 neighborhoodclient_SOURCES =  \
 	main.vala \
-	base_fake_address_manager.vala \
 	mac-getter/hw.vapi \
 	neighborhood.vapi \
 	$(NULL)
 
 neighborhoodclient_VALAFLAGS = \
 	--pkg gee-0.8 \
-	--pkg ntkd-tasklet-system \
-	--pkg tasklet \
+	--pkg json-glib-1.0 \
+	--pkg tasklet-system \
+	--pkg ntkd-common \
+	--pkg pth-tasklet \
 	--pkg ntkdrpc \
-	--pkg zcd-tasklet-system \
 	$(NULL)
 
 neighborhoodclient_CPPFLAGS = \
 	-w \
 	$(GOBJECT_CFLAGS) \
 	$(GEE_CFLAGS) \
+	$(JSONGLIB_CFLAGS) \
 	$(TASKLETSYSTEM_CFLAGS) \
+	$(NTKDCOMMON_CFLAGS) \
 	$(PTHTASKLET_CFLAGS) \
 	$(NTKDRPC_CFLAGS) \
 	$(NULL)
@@ -92,7 +94,9 @@ neighborhoodclient_CPPFLAGS = \
 neighborhoodclient_LDADD = \
 	$(GOBJECT_LIBS) \
 	$(GEE_LIBS) \
+	$(JSONGLIB_LIBS) \
 	$(TASKLETSYSTEM_LIBS) \
+	$(NTKDCOMMON_LIBS) \
 	$(PTHTASKLET_LIBS) \
 	$(NTKDRPC_LIBS) \
 	$(builddir)/libmacgetter.la \

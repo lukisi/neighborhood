@@ -777,19 +777,19 @@ public abstract class FakeAddressManagerStub : Object,
 	public virtual unowned IQspnManagerStub
 	qspn_manager_getter()
 	{
-	    error("FakeAddressManagerSkeleton: this test should not use method qspn_manager_getter.");
+	    error("FakeAddressManagerStub: this test should not use method qspn_manager_getter.");
 	}
 
 	public virtual unowned IPeersManagerStub
 	peers_manager_getter()
 	{
-	    error("FakeAddressManagerSkeleton: this test should not use method peers_manager_getter.");
+	    error("FakeAddressManagerStub: this test should not use method peers_manager_getter.");
 	}
 
 	public virtual unowned ICoordinatorManagerStub
 	coordinator_manager_getter()
 	{
-	    error("FakeAddressManagerSkeleton: this test should not use method coordinator_manager_getter.");
+	    error("FakeAddressManagerStub: this test should not use method coordinator_manager_getter.");
 	}
 }
 
