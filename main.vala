@@ -203,13 +203,13 @@ namespace Netsukuku
         public virtual unowned ICoordinatorManagerSkeleton
         coordinator_manager_getter()
         {
-            error("AddressManagerForIdentity.coordinator_manager_getter: not for identity");
+            error("AddressManagerForIdentity.coordinator_manager_getter: not in this test");
         }
     }
 
     public class AddressManagerForNode : Object, IAddressManagerSkeleton
     {
-        public NeighborhoodManager neighborhood_manager;
+        public weak NeighborhoodManager neighborhood_manager;
         public unowned INeighborhoodManagerSkeleton neighborhood_manager_getter()
         {
             return neighborhood_manager;
@@ -235,16 +235,16 @@ namespace Netsukuku
         }
     }
 
-    AddressManagerForNode node_skeleton;
-
     public class FakeQspnManager : Object, IQspnManagerSkeleton
     {
-		public Netsukuku.IQspnEtpMessage get_full_etp (Netsukuku.IQspnAddress requesting_address, Netsukuku.CallerInfo? caller = null) throws Netsukuku.QspnNotAcceptedError, Netsukuku.QspnBootstrapInProgressError
+		public IQspnEtpMessage get_full_etp (IQspnAddress requesting_address, CallerInfo? caller = null)
+		throws QspnNotAcceptedError, QspnBootstrapInProgressError
 		{
 		    error("not in this test");
 		}
 
-		public void send_etp (Netsukuku.IQspnEtpMessage etp, bool is_full, Netsukuku.CallerInfo? caller = null) throws Netsukuku.QspnNotAcceptedError
+		public void send_etp (IQspnEtpMessage etp, bool is_full, CallerInfo? caller = null)
+		throws QspnNotAcceptedError
 		{
 		    error("not implemented yet");
 		}
@@ -252,52 +252,54 @@ namespace Netsukuku
 
     public class FakePeersManager : Object, IPeersManagerSkeleton
     {
-		public void forward_peer_message (Netsukuku.IPeerMessage peer_message, Netsukuku.CallerInfo? caller = null)
+		public void forward_peer_message (IPeerMessage peer_message, CallerInfo? caller = null)
 		{
 		    error("not implemented yet");
 		}
 
-		public Netsukuku.IPeerParticipantSet get_participant_set (int lvl, Netsukuku.CallerInfo? caller = null) throws Netsukuku.PeersInvalidRequest
+		public IPeerParticipantSet get_participant_set (int lvl, CallerInfo? caller = null)
+		throws PeersInvalidRequest
 		{
 		    error("not in this test");
 		}
 
-		public Netsukuku.IPeersRequest get_request (int msg_id, Netsukuku.IPeerTupleNode respondant, Netsukuku.CallerInfo? caller = null) throws Netsukuku.PeersUnknownMessageError, Netsukuku.PeersInvalidRequest
+		public IPeersRequest get_request (int msg_id, IPeerTupleNode respondant, CallerInfo? caller = null)
+		throws PeersUnknownMessageError, PeersInvalidRequest
 		{
 		    error("not in this test");
 		}
 
-		public void set_failure (int msg_id, Netsukuku.IPeerTupleGNode tuple, Netsukuku.CallerInfo? caller = null)
+		public void set_failure (int msg_id, IPeerTupleGNode tuple, CallerInfo? caller = null)
 		{
 		    error("not in this test");
 		}
 
-		public void set_next_destination (int msg_id, Netsukuku.IPeerTupleGNode tuple, Netsukuku.CallerInfo? caller = null)
+		public void set_next_destination (int msg_id, IPeerTupleGNode tuple, CallerInfo? caller = null)
 		{
 		    error("not in this test");
 		}
 
-		public void set_non_participant (int msg_id, Netsukuku.IPeerTupleGNode tuple, Netsukuku.CallerInfo? caller = null)
+		public void set_non_participant (int msg_id, IPeerTupleGNode tuple, CallerInfo? caller = null)
 		{
 		    error("not in this test");
 		}
 
-		public void set_participant (int p_id, Netsukuku.IPeerTupleGNode tuple, Netsukuku.CallerInfo? caller = null)
+		public void set_participant (int p_id, IPeerTupleGNode tuple, CallerInfo? caller = null)
 		{
 		    error("not in this test");
 		}
 
-		public void set_redo_from_start (int msg_id, Netsukuku.IPeerTupleNode respondant, Netsukuku.CallerInfo? caller = null)
+		public void set_redo_from_start (int msg_id, IPeerTupleNode respondant, CallerInfo? caller = null)
 		{
 		    error("not in this test");
 		}
 
-		public void set_refuse_message (int msg_id, string refuse_message, Netsukuku.IPeerTupleNode respondant, Netsukuku.CallerInfo? caller = null)
+		public void set_refuse_message (int msg_id, string refuse_message, IPeerTupleNode respondant, CallerInfo? caller = null)
 		{
 		    error("not in this test");
 		}
 
-		public void set_response (int msg_id, Netsukuku.IPeersResponse response, Netsukuku.IPeerTupleNode respondant, Netsukuku.CallerInfo? caller = null)
+		public void set_response (int msg_id, IPeersResponse response, IPeerTupleNode respondant, CallerInfo? caller = null)
 		{
 		    error("not in this test");
 		}
@@ -305,26 +307,39 @@ namespace Netsukuku
 
     class MyServerDelegate : Object, IRpcDelegate
     {
-        public Gee.List<Netsukuku.IAddressManagerSkeleton> get_addr_set(CallerInfo caller)
+        public Gee.List<IAddressManagerSkeleton> get_addr_set(CallerInfo caller)
         {
             if (caller is TcpclientCallerInfo)
             {
-                error("not implemented yet");
+                TcpclientCallerInfo c = (TcpclientCallerInfo)caller;
+                string peer_address = c.peer_address;
+                ISourceID sourceid = c.sourceid;
+                IUnicastID unicastid = c.unicastid;
+                var ret = new ArrayList<IAddressManagerSkeleton>();
+                IAddressManagerSkeleton? d = neighborhood_manager.get_dispatcher(sourceid, unicastid, peer_address, null);
+                if (d != null) ret.add(d);
+                return ret;
             }
             else if (caller is UnicastCallerInfo)
             {
-                error("not implemented yet");
-                /*
                 UnicastCallerInfo c = (UnicastCallerInfo)caller;
-                c.unicastid;
-                c.sourceid;
-                c.peer_address;
-                c.dev;
-                */
+                string peer_address = c.peer_address;
+                string dev = c.dev;
+                ISourceID sourceid = c.sourceid;
+                IUnicastID unicastid = c.unicastid;
+                var ret = new ArrayList<IAddressManagerSkeleton>();
+                IAddressManagerSkeleton? d = neighborhood_manager.get_dispatcher(sourceid, unicastid, peer_address, dev);
+                if (d != null) ret.add(d);
+                return ret;
             }
             else if (caller is BroadcastCallerInfo)
             {
-                error("not implemented yet");
+                BroadcastCallerInfo c = (BroadcastCallerInfo)caller;
+                string peer_address = c.peer_address;
+                string dev = c.dev;
+                ISourceID sourceid = c.sourceid;
+                IBroadcastID broadcastid = c.broadcastid;
+                return neighborhood_manager.get_dispatcher_set(sourceid, broadcastid, peer_address, dev);
             }
             else
             {
@@ -341,7 +356,44 @@ namespace Netsukuku
         }
     }
 
+    class Identity : Object
+    {
+        public NodeID id;
+        public FakeQspnManager qspn;
+        public string to_string()
+        {
+            return @"id.id";
+        }
+    }
+
+    class HandledNic : Object
+    {
+        public string dev;
+        public string mac;
+        public string linklocal;
+    }
+
+    class ArcIdentity : Object
+    {
+        public NodeID peer_nodeid;
+        public string peer_mac;
+        public string peer_linklocal;
+    }
+
+    AddressManagerForNode node_skeleton;
+    MyServerDelegate dlg;
+    MyServerErrorHandler err;
+    ArrayList<ITaskletHandle> t_udp_list;
+
     ITasklet client_tasklet;
+    NeighborhoodManager? neighborhood_manager;
+    ArrayList<Identity> identities;
+    HashMap<string,string> node_ns;
+    HashMap<string,HashMap<string,HandledNic>> node_in;
+    HashMap<string,ArrayList<ArcIdentity>> node_f;
+    HashMap<int,INeighborhoodArc> node_arcs;
+    HashMap<string, string> local_addresses;
+
     int main(string[] args)
     {
         if (args.length != 3) error(@"usage: $(args[0]) first-id max-arcs");
@@ -365,111 +417,134 @@ namespace Netsukuku
                 error(@"Failed to unset net.ipv4.conf.all.rp_filter '$(com_ret.stdout)'\n");
         } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
 
-        // generate my first NodeID
-        // TODO
-        // set up associations (ns, in, f)
-        // TODO
+        // Prepare for storing stuff
+        node_arcs = new HashMap<int,INeighborhoodArc>();
+        identities = new ArrayList<Identity>();
+        local_addresses = new HashMap<string,string>();
+        // Set up associations (ns, in, f)
+        node_ns = new HashMap<string,string>();
+        node_in = new HashMap<string,HashMap<string,HandledNic>>();
+        node_f = new HashMap<string,ArrayList<ArcIdentity>>();
+        // generate my first identity: NodeID and associations
+        Identity i_one = new Identity();
+        i_one.id = new NodeID(first_id);
+        i_one.qspn = new FakeQspnManager();
+        identities.add(i_one);
+        node_ns[@"$(i_one)"] = ""; // namespace default
+        node_in[@"$(i_one)"] = new HashMap<string,HandledNic>();
+
+        //
+        node_skeleton = new AddressManagerForNode();
+        node_skeleton.peers_manager = new FakePeersManager();
 
         // Pass tasklet system to the RPC library (ntkdrpc)
         init_tasklet_system(client_tasklet);
         // Initialize module neighborhood
         NeighborhoodManager.init(client_tasklet);
 
+        // create neighborhood_manager
+        neighborhood_manager = new NeighborhoodManager(
+                (/*NodeID*/ source_id, /*NodeID*/ unicast_id, /*string*/ peer_address) => {
+                    IAddressManagerSkeleton? ret;
+                    error("not yet implemented");
+                    /**L'utilizzatore del modulo, che conosce le identità del nodo e gli archi-identità
+                     * che li collegano ad altri nodi, restituisce, se esiste, lo skeleton relativo alla
+                     * identità identity_aware_unicast_id, ma solo se questa è collegata tramite un
+                     * arco-identità alla identità identity_aware_source_id. Inoltre deve trattarsi di un
+                     * arco-identità che si appoggia all'arco reale formato con peer_address. Altrimenti null. 
+                    */
+                },
+                (/*NodeID*/ source_id, /*Gee.List<NodeID>*/ broadcast_set, /*string*/ peer_address, /*string*/ dev) => {
+                    Gee.List<IAddressManagerSkeleton> ret;
+                    error("not yet implemented");
+                    /**L'utilizzatore del modulo restituisce una lista con gli skeleton relativi alle sue
+                     * identità che sono incluse in identity_aware_broadcast_set, ma solo quelle che sono
+                     * collegate tramite un arco-identità alla identità identity_aware_source_id e tale
+                     * arco-identità si appoggia all'arco reale formato su dev con peer_address.
+                    */
+                },
+                /*IAddressManagerSkeleton*/ node_skeleton,
+                max_arcs, new MyStubFactory(), new MyIPRouteManager());
+        node_skeleton.neighborhood_manager = neighborhood_manager;
+        // connect signals
+        neighborhood_manager.nic_address_set.connect(
+            (dev, linklocal) => {
+                Time m = Time.local(time_t());
+                print(@"$(m) ");
+                print(@"Set linklocal address $(linklocal) to $(dev)\n");
+                local_addresses[dev] = linklocal;
+            }
+        );
+        neighborhood_manager.nic_address_unset.connect(
+            (dev) => {
+                Time m = Time.local(time_t());
+                print(@"$(m) ");
+                print(@"Unset linklocal address from $(dev)\n");
+                local_addresses.unset(dev);
+            }
+        );
+        neighborhood_manager.arc_added.connect(
+            (arc) => {
+                Time m = Time.local(time_t());
+                print(@"$(m) ");
+                print(@"Added arc with $(arc.neighbour_mac), RTT $(arc.cost)\n");
+            }
+        );
+        neighborhood_manager.arc_removed.connect(
+            (arc) => {
+                Time m = Time.local(time_t());
+                print(@"$(m) ");
+                print(@"Removed arc with $(arc.neighbour_mac)\n");
+            }
+        );
+        neighborhood_manager.arc_changed.connect(
+            (arc) => {
+                Time m = Time.local(time_t());
+                print(@"$(m) ");
+                print(@"Changed arc with $(arc.neighbour_mac), RTT $(arc.cost)\n");
+            }
+        );
+
+        dlg = new MyServerDelegate();
+        err = new MyServerErrorHandler();
+
+        // Handle for TCP
+        ITaskletHandle t_tcp;
+        // Handles for UDP
+        t_udp_list = new ArrayList<ITaskletHandle>();
+
+        // start listen TCP
+        t_tcp = tcp_listen(dlg, err, ntkd_port);
+
+        // create module for whole-node messages
+        node_skeleton.peers_manager = new FakePeersManager();
+
+        // start a tasklet to get commands from stdin.
+        CommandLineInterfaceTasklet ts = new CommandLineInterfaceTasklet();
+        client_tasklet.spawn(ts);
+
+        // register handlers for SIGINT and SIGTERM to exit
+        Posix.signal(Posix.SIGINT, safe_exit);
+        Posix.signal(Posix.SIGTERM, safe_exit);
+        // Main loop
+        while (true)
         {
-            MyServerDelegate dlg = new MyServerDelegate();
-            MyServerErrorHandler err = new MyServerErrorHandler();
-
-            // Handle for TCP
-            ITaskletHandle t_tcp;
-            // Handles for UDP
-            ArrayList<ITaskletHandle> t_udp_list = new ArrayList<ITaskletHandle>();
-
-            // start listen TCP
-            t_tcp = tcp_listen(dlg, err, ntkd_port);
-
-            // create manager for node
-            node_skeleton = new AddressManagerForNode();
-
-            // create module for whole-node messages
-            node_skeleton.peers_manager = new FakePeersManager();
-
-            // create module neighborhood
-            node_skeleton.neighborhood_manager = new NeighborhoodManager(
-                    (/*NodeID*/ source_id, /*NodeID*/ unicast_id, /*string*/ peer_address) => {
-                        IAddressManagerSkeleton? ret;
-                        error("not yet implemented");
-                    },
-                    (/*NodeID*/ source_id, /*Gee.List<NodeID>*/ broadcast_set, /*string*/ peer_address, /*string*/ dev) => {
-                        Gee.List<IAddressManagerSkeleton> ret;
-                        error("not yet implemented");
-                    },
-                    /*IAddressManagerSkeleton*/ node_skeleton,
-                    max_arcs, new MyStubFactory(), new MyIPRouteManager());
-            // connect signals
-            node_skeleton.neighborhood_manager.arc_added.connect(
-                (arc) => {
-                    Time m = Time.local(time_t());
-                    print(@"$(m) ");
-                    print(@"Added arc with $(arc.neighbour_mac), RTT $(arc.cost)\n");
-                }
-            );
-            node_skeleton.neighborhood_manager.arc_removed.connect(
-                (arc) => {
-                    Time m = Time.local(time_t());
-                    print(@"$(m) ");
-                    print(@"Removed arc with $(arc.neighbour_mac)\n");
-                }
-            );
-            node_skeleton.neighborhood_manager.arc_changed.connect(
-                (arc) => {
-                    Time m = Time.local(time_t());
-                    print(@"$(m) ");
-                    print(@"Changed arc with $(arc.neighbour_mac), RTT $(arc.cost)\n");
-                }
-            );
-
-            foreach (string dev in args[1:args.length])
-            {
-                try {
-                    TaskletCommandResult com_ret = client_tasklet.exec_command(@"sysctl net.ipv4.conf.$(dev).rp_filter=0");
-                    if (com_ret.exit_status != 0)
-                        error(@"$(com_ret.stderr)\n");
-                    com_ret = client_tasklet.exec_command(@"sysctl -n net.ipv4.conf.$(dev).rp_filter");
-                    if (com_ret.exit_status != 0)
-                        error(@"$(com_ret.stderr)\n");
-                    if (com_ret.stdout != "0\n")
-                        error(@"Failed to unset net.ipv4.conf.$(dev).rp_filter '$(com_ret.stdout)'\n");
-                } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
-                // start listen UDP on dev
-                t_udp_list.add(udp_listen(dlg, err, ntkd_port, dev));
-                // prepare a NIC and run monitor
-                string my_mac = macgetter.get_mac(dev).up();
-                MyNetworkInterface nic = new MyNetworkInterface(dev, my_mac);
-                // run monitor
-                node_skeleton.neighborhood_manager.start_monitor(nic);
-                print(@"Monitoring dev $(nic.dev), MAC $(nic.mac)\n");
-            }
-
-            // register handlers for SIGINT and SIGTERM to exit
-            Posix.signal(Posix.SIGINT, safe_exit);
-            Posix.signal(Posix.SIGTERM, safe_exit);
-            // Main loop
-            while (true)
-            {
-                client_tasklet.ms_wait(100);
-                if (do_me_exit) break;
-            }
-            /*
-            node_skeleton.neighborhood_manager.stop_monitor_all();
-            */
-            // Here node_skeleton.neighborhood_manager should be destroyed
-            // and the method stop_monitor_all get called. TODO check.
-            node_skeleton.neighborhood_manager = null;
-            node_skeleton = null;
-
-            foreach (ITaskletHandle t_udp in t_udp_list) t_udp.kill();
-            t_tcp.kill();
+            client_tasklet.ms_wait(100);
+            if (do_me_exit) break;
         }
+        print("\n");
+        // This will destroy the object NeighborhoodManager and hence call
+        //  its stop_monitor_all.
+        // Beware that node_skeleton.neighborhood_manager
+        //  is a weak reference.
+        // Beware also that since we destroy the object, we won't receive
+        //  any more signal from it, such as nic_address_unset for all the
+        //  linklocal addresses that will be removed from the NICs.
+        neighborhood_manager = null;
+
+        foreach (ITaskletHandle t_udp in t_udp_list) t_udp.kill();
+        t_tcp.kill();
+
         client_tasklet.ms_wait(100);
         PthTaskletImplementer.kill();
         return 0;
@@ -480,6 +555,39 @@ namespace Netsukuku
     {
         // We got here because of a signal. Quick processing.
         do_me_exit = true;
+    }
+
+    void manage_nic(string dev)
+    {
+        try {
+            TaskletCommandResult com_ret = client_tasklet.exec_command(@"sysctl net.ipv4.conf.$(dev).rp_filter=0");
+            if (com_ret.exit_status != 0)
+                error(@"$(com_ret.stderr)\n");
+            com_ret = client_tasklet.exec_command(@"sysctl -n net.ipv4.conf.$(dev).rp_filter");
+            if (com_ret.exit_status != 0)
+                error(@"$(com_ret.stderr)\n");
+            if (com_ret.stdout != "0\n")
+                error(@"Failed to unset net.ipv4.conf.$(dev).rp_filter '$(com_ret.stdout)'\n");
+        } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
+        // start listen UDP on dev
+        t_udp_list.add(udp_listen(dlg, err, ntkd_port, dev));
+        // prepare a NIC and run monitor
+        string my_mac = macgetter.get_mac(dev).up();
+        MyNetworkInterface nic = new MyNetworkInterface(dev, my_mac);
+        // run monitor
+        neighborhood_manager.start_monitor(nic);
+        // here the linklocal address has been added, and the signal handler for
+        //  nic_address_set has been processed
+        print(@"Monitoring dev $(nic.dev), MAC $(nic.mac), linklocal $(local_addresses[nic.dev])\n");
+        // manage associations: add to the "main identity"
+        foreach (Identity i in identities) if (node_ns[@"$(i)"] == "")
+        {
+            HandledNic hnic = new HandledNic();
+            hnic.dev = dev;
+            hnic.mac = my_mac;
+            hnic.linklocal = local_addresses[nic.dev];
+            node_in[@"$(i)"][dev] = hnic;
+        }
     }
 
     class CommandLineInterfaceTasklet : Object, ITaskletSpawnable
@@ -500,13 +608,17 @@ namespace Netsukuku
                     if (_args.size == 0)
                     {
                     }
+                    else if (_args[0] == "quit" && _args.size == 1)
+                    {
+                        do_me_exit = true;
+                    }
                     else if (_args[0] == "info" && _args.size == 1)
                     {
                         error("not implemented yet");
                     }
                     else if (_args[0] == "manage-nic" && _args.size == 2)
                     {
-                        error("not implemented yet");
+                        manage_nic(_args[1]);
                     }
                     else if (_args[0] == "add-arc" && _args.size == 4)
                     {
@@ -583,7 +695,7 @@ Command list:
 > help
   Shows this menu.
 
-> Ctrl-C
+> Ctrl-C, quit
   Exits.
 
 """);
