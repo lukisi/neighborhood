@@ -448,6 +448,7 @@ namespace Netsukuku
             int i3 = Random.int_range(0, 255);
             string local_address = @"169.254.$(i2).$(i3)";
             ip_mgr.add_address(local_address, dev);
+            nic_address_set(dev, local_address);
             // start monitor
             MonitorRunTasklet ts = new MonitorRunTasklet();
             ts.mgr = this;
@@ -478,6 +479,7 @@ namespace Netsukuku
             // remove local address
             string local_address = local_addresses[dev];
             ip_mgr.remove_address(local_address, dev);
+            nic_address_unset(dev);
             // cleanup private members
             monitoring_devs.unset(dev);
             nics.unset(dev);
@@ -550,6 +552,8 @@ namespace Netsukuku
             public void * func()
             {
                 long last_rtt = -1;
+                // wait that the pair of nodes both create the NeighborhoodRealArc.
+                tasklet.ms_wait(400);
                 while (true)
                 {
                     // Measure rtt
@@ -683,7 +687,7 @@ namespace Netsukuku
                 if (! (_source_id is WholeNodeSourceID)) return null;
                 WholeNodeSourceID source_id = (WholeNodeSourceID)_source_id;
                 NeighborhoodNodeID whole_node_source_id = source_id.id;
-                foreach (NeighborhoodRealArc arc in arcs) if (arc.available)
+                foreach (NeighborhoodRealArc arc in arcs)
                 {
                     if (arc.neighbour_nic_addr == peer_address &&
                             arc.neighbour_id.equals(whole_node_source_id)) return node_skeleton;
@@ -1220,6 +1224,7 @@ namespace Netsukuku
 
         ~NeighborhoodManager()
         {
+            print("~NeighborhoodManager()\n");
             stop_monitor_all();
         }
     }
