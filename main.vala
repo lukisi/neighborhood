@@ -502,6 +502,7 @@ namespace Netsukuku
                     if (e.@value == arc) arc_id = e.key;
                 print(@"$(m) ");
                 print(@"Removed arc (arc-id=$(arc_id)) with $(arc.neighbour_mac)\n");
+                node_arcs.unset(arc_id);
             }
         );
         neighborhood_manager.arc_changed.connect(
@@ -626,6 +627,12 @@ namespace Netsukuku
                     {
                         Gee.List<INeighborhoodArc> arcs = neighborhood_manager.current_arcs();
                         print(@"Current arcs: $(arcs.size).\n");
+                        assert(arcs.size == node_arcs.size);
+                        foreach (int arc_id in node_arcs.keys)
+                        {
+                            INeighborhoodArc arc = node_arcs[arc_id];
+                            print(@"  $(arc_id) - from $(arc.nic.dev) with $(arc.neighbour_mac), RTT $(arc.cost)\n");
+                        }
                         // TODO
                     }
                     else if (_args[0] == "manage-nic" && _args.size == 2)
