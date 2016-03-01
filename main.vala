@@ -373,7 +373,7 @@ namespace Netsukuku
         public string linklocal;
     }
 
-    class ArcIdentity : Object
+    class IdentityArc : Object
     {
         public NodeID peer_nodeid;
         public string peer_mac;
@@ -390,7 +390,7 @@ namespace Netsukuku
     ArrayList<Identity> identities;
     HashMap<string,string> node_ns;
     HashMap<string,HashMap<string,HandledNic>> node_in;
-    HashMap<string,ArrayList<ArcIdentity>> node_f;
+    HashMap<string,ArrayList<IdentityArc>> node_f;
     HashMap<int,INeighborhoodArc> node_arcs;
     int next_arc_id;
     HashMap<string, string> local_addresses;
@@ -399,7 +399,9 @@ namespace Netsukuku
     {
         if (args.length != 3) error(@"usage: $(args[0]) first-id max-arcs");
         int first_id = int.parse(args[1]);
+        if (first_id <= 0) error(@"usage: $(args[0]) first-id max-arcs");
         int max_arcs = int.parse(args[2]);
+        if (max_arcs <= 0) error(@"usage: $(args[0]) first-id max-arcs");
 
         // Initialize tasklet system
         PthTaskletImplementer.init();
@@ -426,7 +428,7 @@ namespace Netsukuku
         // Set up associations (ns, in, f)
         node_ns = new HashMap<string,string>();
         node_in = new HashMap<string,HashMap<string,HandledNic>>();
-        node_f = new HashMap<string,ArrayList<ArcIdentity>>();
+        node_f = new HashMap<string,ArrayList<IdentityArc>>();
         // generate my first identity: NodeID and associations
         Identity i_one = new Identity();
         i_one.id = new NodeID(first_id);
@@ -488,29 +490,37 @@ namespace Netsukuku
         neighborhood_manager.arc_added.connect(
             (arc) => {
                 Time m = Time.local(time_t());
+                int arc_id = next_arc_id++;
                 print(@"$(m) ");
-                print(@"Added arc (arc-id=$(next_arc_id)) from $(arc.nic.dev) with $(arc.neighbour_mac), RTT $(arc.cost)\n");
-                node_arcs[next_arc_id] = arc;
-                next_arc_id++;
+                print(@"Added arc (arc-id=$(arc_id)) from $(arc.nic.dev) with $(arc.neighbour_mac), RTT $(arc.cost)\n");
+                node_arcs[arc_id] = arc;
+                // identities and this arc
+                foreach (Identity my_id in identities)
+                {
+                    string k = @"$(my_id)-$(arc_id)";
+                    node_f[k] = new ArrayList<IdentityArc>();
+                }
             }
         );
         neighborhood_manager.arc_removed.connect(
             (arc) => {
                 Time m = Time.local(time_t());
-                int arc_id = -1;
-                foreach (Map.Entry<int,INeighborhoodArc> e in node_arcs.entries)
-                    if (e.@value == arc) arc_id = e.key;
+                int arc_id = find_arc_id(arc);
                 print(@"$(m) ");
                 print(@"Removed arc (arc-id=$(arc_id)) with $(arc.neighbour_mac)\n");
                 node_arcs.unset(arc_id);
+                // identities and this arc
+                foreach (Identity my_id in identities)
+                {
+                    string k = @"$(my_id)-$(arc_id)";
+                    node_f.unset(k);
+                }
             }
         );
         neighborhood_manager.arc_changed.connect(
             (arc) => {
                 Time m = Time.local(time_t());
-                int arc_id = -1;
-                foreach (Map.Entry<int,INeighborhoodArc> e in node_arcs.entries)
-                    if (e.@value == arc) arc_id = e.key;
+                int arc_id = find_arc_id(arc);
                 print(@"$(m) ");
                 print(@"Changed arc (arc-id=$(arc_id)) with $(arc.neighbour_mac), RTT $(arc.cost)\n");
             }
@@ -601,6 +611,52 @@ namespace Netsukuku
         }
     }
 
+    void add_identity_arc(INeighborhoodArc arc, Identity my_id, NodeID its_id, string peer_mac, string peer_linklocal)
+    {
+        int arc_id = find_arc_id(arc);
+        string k = @"$(my_id)-$(arc_id)";
+        IdentityArc identity_arc = new IdentityArc();
+        identity_arc.peer_nodeid = its_id;
+        identity_arc.peer_mac = peer_mac;
+        identity_arc.peer_linklocal = peer_linklocal;
+        node_f[k].add(identity_arc);
+    }
+
+    errordomain MakePeerIdentityError {GENERIC}
+    NodeID make_peer_id(string its_id) throws MakePeerIdentityError
+    {
+        int i_its_id = int.parse(its_id);
+        if (i_its_id <= 0) throw new MakePeerIdentityError.GENERIC("");
+        return new NodeID(i_its_id);
+    }
+
+    errordomain FindArcError {GENERIC}
+    INeighborhoodArc find_arc(string arc_id) throws FindArcError
+    {
+        int i_arc_id = int.parse(arc_id);
+        if (i_arc_id <= 0) throw new FindArcError.GENERIC("");
+        if (!node_arcs.has_key(i_arc_id)) throw new FindArcError.GENERIC("");
+        return node_arcs[i_arc_id];
+    }
+    int find_arc_id(INeighborhoodArc arc)
+    {
+        foreach (Map.Entry<int,INeighborhoodArc> e in node_arcs.entries)
+            if (e.@value == arc) return e.key;
+        assert_not_reached();
+    }
+
+    errordomain FindIdentityError {GENERIC}
+    Identity find_identity(string my_id) throws FindIdentityError
+    {
+        int i_my_id = int.parse(my_id);
+        if (i_my_id <= 0) throw new FindIdentityError.GENERIC("");
+        foreach (Identity _id in identities)
+        {
+            if (_id.id.id == i_my_id) return _id;
+        }
+        throw new FindIdentityError.GENERIC("");
+    }
+
     class CommandLineInterfaceTasklet : Object, ITaskletSpawnable
     {
         public void * func()
@@ -639,9 +695,30 @@ namespace Netsukuku
                     {
                         manage_nic(_args[1]);
                     }
-                    else if (_args[0] == "add-arc" && _args.size == 4)
+                    else if (_args[0] == "add-arc" && _args.size == 6)
                     {
-                        error("not implemented yet");
+                        INeighborhoodArc arc;
+                        try {
+                            arc = find_arc(_args[1]);
+                        } catch (FindArcError e) {
+                            print(@"wrong arc-id '$(_args[1])'\n");
+                            continue;
+                        }
+                        Identity my_id;
+                        try {
+                            my_id = find_identity(_args[2]);
+                        } catch (FindIdentityError e) {
+                            print(@"wrong my-id '$(_args[2])'\n");
+                            continue;
+                        }
+                        NodeID its_id;
+                        try {
+                            its_id = make_peer_id(_args[3]);
+                        } catch (MakePeerIdentityError e) {
+                            print(@"wrong its-id '$(_args[3])'\n");
+                            continue;
+                        }
+                        add_identity_arc(arc, my_id, its_id, _args[4], _args[5]);
                     }
                     else if (_args[0] == "add-id" && _args.size >= 3)
                     {
@@ -682,7 +759,7 @@ Command list:
 > manage-nic <my-dev>
   Starts to manage a NIC.
 
-> add-arc <arc-id> <my-id> <its-id>
+> add-arc <arc-id> <my-id> <its-id> <peer-mac> <peer-linklocal>
   Adds an identity-arc.
 
 > add-id <my-old-id> <my-new-id> [<arc-id> <its-old-id> <its-new-id>] [...]
