@@ -392,6 +392,7 @@ namespace Netsukuku
     HashMap<string,HashMap<string,HandledNic>> node_in;
     HashMap<string,ArrayList<ArcIdentity>> node_f;
     HashMap<int,INeighborhoodArc> node_arcs;
+    int next_arc_id;
     HashMap<string, string> local_addresses;
 
     int main(string[] args)
@@ -419,6 +420,7 @@ namespace Netsukuku
 
         // Prepare for storing stuff
         node_arcs = new HashMap<int,INeighborhoodArc>();
+        next_arc_id = 0;
         identities = new ArrayList<Identity>();
         local_addresses = new HashMap<string,string>();
         // Set up associations (ns, in, f)
@@ -487,21 +489,29 @@ namespace Netsukuku
             (arc) => {
                 Time m = Time.local(time_t());
                 print(@"$(m) ");
-                print(@"Added arc with $(arc.neighbour_mac), RTT $(arc.cost)\n");
+                print(@"Added arc (arc-id=$(next_arc_id)) from $(arc.nic.dev) with $(arc.neighbour_mac), RTT $(arc.cost)\n");
+                node_arcs[next_arc_id] = arc;
+                next_arc_id++;
             }
         );
         neighborhood_manager.arc_removed.connect(
             (arc) => {
                 Time m = Time.local(time_t());
+                int arc_id = -1;
+                foreach (Map.Entry<int,INeighborhoodArc> e in node_arcs.entries)
+                    if (e.@value == arc) arc_id = e.key;
                 print(@"$(m) ");
-                print(@"Removed arc with $(arc.neighbour_mac)\n");
+                print(@"Removed arc (arc-id=$(arc_id)) with $(arc.neighbour_mac)\n");
             }
         );
         neighborhood_manager.arc_changed.connect(
             (arc) => {
                 Time m = Time.local(time_t());
+                int arc_id = -1;
+                foreach (Map.Entry<int,INeighborhoodArc> e in node_arcs.entries)
+                    if (e.@value == arc) arc_id = e.key;
                 print(@"$(m) ");
-                print(@"Changed arc with $(arc.neighbour_mac), RTT $(arc.cost)\n");
+                print(@"Changed arc (arc-id=$(arc_id)) with $(arc.neighbour_mac), RTT $(arc.cost)\n");
             }
         );
 
@@ -614,7 +624,9 @@ namespace Netsukuku
                     }
                     else if (_args[0] == "info" && _args.size == 1)
                     {
-                        error("not implemented yet");
+                        Gee.List<INeighborhoodArc> arcs = neighborhood_manager.current_arcs();
+                        print(@"Current arcs: $(arcs.size).\n");
+                        // TODO
                     }
                     else if (_args[0] == "manage-nic" && _args.size == 2)
                     {
