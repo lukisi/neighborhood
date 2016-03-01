@@ -1,0 +1,7 @@
+Part of Netsukuku.
+
+This is the module Neighborhood.
+It depends on: tasklet-system, ntkd-common, ntkdrpc.
+
+The ''ntkd'' daemon includes it.
+
