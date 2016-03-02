@@ -159,7 +159,7 @@ namespace Netsukuku
                 throw new NeighborhoodGetRttError.GENERIC(@"Unable to spawn a command: $(e.message)");
             }
             if (com_ret.exit_status != 0)
-                throw new NeighborhoodGetRttError.GENERIC(@"ping: error $(com_ret.stderr)");
+                throw new NeighborhoodGetRttError.GENERIC(@"ping: error $(com_ret.stdout)");
             foreach (string line in com_ret.stdout.split("\n"))
             {
                 /*  """rtt min/avg/max/mdev = 2.854/2.854/2.854/0.000 ms"""  */
@@ -362,7 +362,7 @@ namespace Netsukuku
         public FakeQspnManager qspn;
         public string to_string()
         {
-            return @"id.id";
+            return @"$(id.id)";
         }
     }
 
@@ -422,7 +422,7 @@ namespace Netsukuku
 
         // Prepare for storing stuff
         node_arcs = new HashMap<int,INeighborhoodArc>();
-        next_arc_id = 0;
+        next_arc_id = 1;
         identities = new ArrayList<Identity>();
         local_addresses = new HashMap<string,string>();
         // Set up associations (ns, in, f)
@@ -681,13 +681,38 @@ namespace Netsukuku
                     }
                     else if (_args[0] == "info" && _args.size == 1)
                     {
+                        print(@"My identities: $(identities.size).\n");
+                        foreach (Identity my_id in identities)
+                        {
+                            print(@"  $(my_id):\n");
+                            string nsid = (node_ns[@"$(my_id)"] == "") ? "default" : node_ns[@"$(my_id)"];
+                            print(@"    in network namespace $(nsid)\n");
+                            if (node_in[@"$(my_id)"].size > 0)
+                            {
+                                print("    handles:\n");
+                                foreach (string real_dev in node_in[@"$(my_id)"].keys)
+                                {
+                                    HandledNic nic = node_in[@"$(my_id)"][real_dev];
+                                    print(@"      $(nic.dev)($(real_dev)) $(nic.mac) $(nic.linklocal)\n");
+                                }
+                            }
+                        }
                         Gee.List<INeighborhoodArc> arcs = neighborhood_manager.current_arcs();
                         print(@"Current arcs: $(arcs.size).\n");
                         assert(arcs.size == node_arcs.size);
                         foreach (int arc_id in node_arcs.keys)
                         {
                             INeighborhoodArc arc = node_arcs[arc_id];
-                            print(@"  $(arc_id) - from $(arc.nic.dev) with $(arc.neighbour_mac), RTT $(arc.cost)\n");
+                            print(@"  $(arc_id) - from $(arc.nic.dev) with $(arc.neighbour_mac) $(arc.neighbour_nic_addr), RTT $(arc.cost)\n");
+                            foreach (Identity my_id in identities)
+                            {
+                                string k = @"$(my_id)-$(arc_id)";
+                                assert(node_f.has_key(k));
+                                foreach (IdentityArc identity_arc in node_f[k])
+                                {
+                                    print(@"    IdentityArc $(my_id) to $(identity_arc.peer_nodeid.id) $(identity_arc.peer_mac) $(identity_arc.peer_linklocal)\n");
+                                }
+                            }
                         }
                         // TODO
                     }
@@ -798,7 +823,7 @@ Command list:
                     }
                     else
                     {
-                        print("CLI: unknown command. Try help.\n");
+                        print("CLI: unknown command or bad arguments. Try help.\n");
                     }
                 }
             } catch (Error e) {
