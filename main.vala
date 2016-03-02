@@ -179,6 +179,15 @@ namespace Netsukuku
         }
     }
 
+    public class MyMessage : Object, IPeerMessage, IQspnEtpMessage
+    {
+        public MyMessage(string msg)
+        {
+            this.msg = msg;
+        }
+        public string msg {get; set;}
+    }
+
     public class AddressManagerForIdentity : Object, IAddressManagerSkeleton
     {
         public virtual unowned INeighborhoodManagerSkeleton
@@ -252,9 +261,44 @@ namespace Netsukuku
 
     public class FakePeersManager : Object, IPeersManagerSkeleton
     {
-		public void forward_peer_message (IPeerMessage peer_message, CallerInfo? caller = null)
+		public void forward_peer_message(IPeerMessage peer_message, CallerInfo? caller = null)
 		{
-		    error("not implemented yet");
+		    assert(peer_message is MyMessage);
+		    MyMessage msg = (MyMessage)peer_message;
+		    ISourceID sourceid;
+		    string dev;
+		    if (caller is TcpclientCallerInfo)
+		    {
+		        TcpclientCallerInfo c = (TcpclientCallerInfo)caller;
+		        sourceid = c.sourceid;
+		        dev = "";
+		        foreach (string k in local_addresses.keys) if (local_addresses[k] == c.my_address) dev = k;
+		        if (dev == "")
+		        {
+		            print("forward_peer_message: called from a node which is not a neighbor.\n");
+		            return;
+		        }
+		    }
+		    else if (caller is UnicastCallerInfo)
+		    {
+		        UnicastCallerInfo c = (UnicastCallerInfo)caller;
+		        sourceid = c.sourceid;
+		        dev = c.dev;
+		    }
+		    else if (caller is BroadcastCallerInfo)
+		    {
+		        BroadcastCallerInfo c = (BroadcastCallerInfo)caller;
+		        sourceid = c.sourceid;
+		        dev = c.dev;
+		    }
+		    else assert_not_reached();
+		    INeighborhoodArc? arc = neighborhood_manager.get_node_arc(sourceid, dev);
+		    if (arc == null)
+	        {
+	            print("forward_peer_message: cannot find source node-arc.\n");
+	            return;
+	        }
+		    print(@"As a whole-node, from arc-id=$(find_arc_id(arc)), got message: \"$(msg.msg)\".\n");
 		}
 
 		public IPeerParticipantSet get_participant_set (int lvl, CallerInfo? caller = null)
@@ -445,6 +489,8 @@ namespace Netsukuku
         init_tasklet_system(client_tasklet);
         // Initialize module neighborhood
         NeighborhoodManager.init(client_tasklet);
+        // Initialize my serializables
+        typeof(MyMessage).class_peek();
 
         // create neighborhood_manager
         neighborhood_manager = new NeighborhoodManager(
@@ -622,6 +668,21 @@ namespace Netsukuku
         node_f[k].add(identity_arc);
     }
 
+    void whole_node_unicast(INeighborhoodArc arc, string msg)
+    {
+        MyMessage _msg = new MyMessage(msg);
+        try {
+            neighborhood_manager.get_stub_whole_node_unicast(arc).peers_manager.forward_peer_message(_msg);
+        } catch (StubError.DID_NOT_WAIT_REPLY e) {
+            // the method is void, so:
+            assert_not_reached();
+        } catch (StubError e) {
+            print(@"Got a stub-error: $(e.message)\n");
+        } catch (DeserializeError e) {
+            print(@"Got a deserialize-error: $(e.message)\n");
+        }
+    }
+
     errordomain MakePeerIdentityError {GENERIC}
     NodeID make_peer_id(string its_id) throws MakePeerIdentityError
     {
@@ -759,7 +820,19 @@ namespace Netsukuku
                     }
                     else if (_args[0] == "whole-node-unicast" && _args.size == 4)
                     {
-                        error("not implemented yet");
+                        INeighborhoodArc arc;
+                        try {
+                            arc = find_arc(_args[1]);
+                        } catch (FindArcError e) {
+                            print(@"wrong arc-id '$(_args[1])'\n");
+                            continue;
+                        }
+                        if (_args[2] != "--")
+                        {
+                            print("bad args\n");
+                            continue;
+                        }
+                        whole_node_unicast(arc, _args[3]);
                     }
                     else if (_args[0] == "whole-node-broadcast" && _args.size >= 4)
                     {
