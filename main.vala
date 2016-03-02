@@ -683,6 +683,31 @@ namespace Netsukuku
         }
     }
 
+    void whole_node_broadcast(Gee.List<INeighborhoodArc> arcs, string msg)
+    {
+        MyMessage _msg = new MyMessage(msg);
+        try {
+            MissedHandler miss = new MissedHandler();
+            neighborhood_manager.get_stub_whole_node_broadcast(arcs, miss).peers_manager.forward_peer_message(_msg);
+        } catch (StubError.DID_NOT_WAIT_REPLY e) {
+            // the method is void, so:
+            assert_not_reached();
+        } catch (StubError e) {
+            // the method is broadcast, so:
+            assert_not_reached();
+        } catch (DeserializeError e) {
+            // the method is broadcast, so:
+            assert_not_reached();
+        }
+    }
+    class MissedHandler : Object, INeighborhoodMissingArcHandler
+    {
+        public void missing(INeighborhoodArc arc)
+        {
+            print(@"A broadcast message missed the arc arc-id=$(find_arc_id(arc)).\n");
+        }
+    }
+
     errordomain MakePeerIdentityError {GENERIC}
     NodeID make_peer_id(string its_id) throws MakePeerIdentityError
     {
@@ -836,7 +861,22 @@ namespace Netsukuku
                     }
                     else if (_args[0] == "whole-node-broadcast" && _args.size >= 4)
                     {
-                        error("not implemented yet");
+                        ArrayList<INeighborhoodArc> arcs = new ArrayList<INeighborhoodArc>();
+                        for (int i = 1; i < _args.size-2; i++)
+                        {
+                            try {
+                                arcs.add(find_arc(_args[i]));
+                            } catch (FindArcError e) {
+                                print(@"wrong arc-id '$(_args[i])'\n");
+                            }
+                        }
+                        if (arcs.is_empty) continue;
+                        if (_args[_args.size-2] != "--")
+                        {
+                            print("bad args\n");
+                            continue;
+                        }
+                        whole_node_broadcast(arcs, _args[_args.size-1]);
                     }
                     else if (_args[0] == "identity-aware-unicast" && _args.size == 6)
                     {
