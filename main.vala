@@ -188,7 +188,7 @@ namespace Netsukuku
         public string msg {get; set;}
     }
 
-    public class AddressManagerForIdentity : Object, IAddressManagerSkeleton
+    class AddressManagerForIdentity : Object, IAddressManagerSkeleton
     {
         public virtual unowned INeighborhoodManagerSkeleton
         neighborhood_manager_getter()
@@ -216,7 +216,7 @@ namespace Netsukuku
         }
     }
 
-    public class AddressManagerForNode : Object, IAddressManagerSkeleton
+    class AddressManagerForNode : Object, IAddressManagerSkeleton
     {
         public weak NeighborhoodManager neighborhood_manager;
         public unowned INeighborhoodManagerSkeleton neighborhood_manager_getter()
@@ -244,8 +244,14 @@ namespace Netsukuku
         }
     }
 
-    public class FakeQspnManager : Object, IQspnManagerSkeleton
+    class FakeQspnManager : Object, IQspnManagerSkeleton
     {
+        public Identity id;
+        public FakeQspnManager(Identity id)
+        {
+            this.id = id;
+        }
+
         public IQspnEtpMessage get_full_etp(IQspnAddress requesting_address, CallerInfo? caller = null)
         throws QspnNotAcceptedError, QspnBootstrapInProgressError
         {
@@ -255,7 +261,42 @@ namespace Netsukuku
         public void send_etp(IQspnEtpMessage etp, bool is_full, CallerInfo? caller = null)
         throws QspnNotAcceptedError
         {
-            error("not implemented yet");
+            assert(etp is MyMessage);
+            MyMessage msg = (MyMessage)etp;
+            ISourceID sourceid;
+            string dev;
+            if (caller is TcpclientCallerInfo)
+            {
+                TcpclientCallerInfo c = (TcpclientCallerInfo)caller;
+                sourceid = c.sourceid;
+                dev = "";
+                foreach (string k in local_addresses.keys) if (local_addresses[k] == c.my_address) dev = k;
+                if (dev == "")
+                {
+                    print("send_etp: called from a node which is not a neighbor.\n");
+                    return;
+                }
+            }
+            else if (caller is UnicastCallerInfo)
+            {
+                UnicastCallerInfo c = (UnicastCallerInfo)caller;
+                sourceid = c.sourceid;
+                dev = c.dev;
+            }
+            else if (caller is BroadcastCallerInfo)
+            {
+                BroadcastCallerInfo c = (BroadcastCallerInfo)caller;
+                sourceid = c.sourceid;
+                dev = c.dev;
+            }
+            else assert_not_reached();
+            NodeID identity_aware_my_id = id.id;
+            NodeID? identity_aware_peer_id = neighborhood_manager.get_identity(sourceid);
+            if (identity_aware_peer_id == null)
+            {
+                error("send_etp: the caller did not prepare a message suited for identity-aware module");
+            }
+            print(@"As identity $(id), from peer-identity $(identity_aware_peer_id.id) on device $(dev), got message: \"$(msg.msg)\".\n");
         }
     }
 
@@ -402,8 +443,18 @@ namespace Netsukuku
 
     class Identity : Object
     {
+        public Identity(int my_id)
+        {
+            id = new NodeID(my_id);
+            qspn = new FakeQspnManager(this);
+            identity_skeleton = new AddressManagerForIdentity();
+            identity_skeleton.qspn_manager = qspn;
+        }
+
         public NodeID id;
         public FakeQspnManager qspn;
+        public AddressManagerForIdentity identity_skeleton;
+
         public string to_string()
         {
             return @"$(id.id)";
@@ -474,9 +525,7 @@ namespace Netsukuku
         node_in = new HashMap<string,HashMap<string,HandledNic>>();
         node_f = new HashMap<string,ArrayList<IdentityArc>>();
         // generate my first identity: NodeID and associations
-        Identity i_one = new Identity();
-        i_one.id = new NodeID(first_id);
-        i_one.qspn = new FakeQspnManager();
+        Identity i_one = new Identity(first_id);
         identities.add(i_one);
         node_ns[@"$(i_one)"] = ""; // namespace default
         node_in[@"$(i_one)"] = new HashMap<string,HandledNic>();
@@ -496,17 +545,36 @@ namespace Netsukuku
         neighborhood_manager = new NeighborhoodManager(
                 (/*NodeID*/ source_id, /*NodeID*/ unicast_id, /*string*/ peer_address) => {
                     IAddressManagerSkeleton? ret;
-                    error("not yet implemented");
-                    /**L'utilizzatore del modulo, che conosce le identità del nodo e gli archi-identità
-                     * che li collegano ad altri nodi, restituisce, se esiste, lo skeleton relativo alla
-                     * identità identity_aware_unicast_id, ma solo se questa è collegata tramite un
-                     * arco-identità alla identità identity_aware_source_id. Inoltre deve trattarsi di un
-                     * arco-identità che si appoggia all'arco reale formato con peer_address. Altrimenti null. 
-                    */
+                    Identity my_id;
+                    try {
+                        my_id = find_identity(@"$(unicast_id.id)");
+                    } catch (FindIdentityError e) {
+                        return null;
+                    }
+                    int arc_id = -1;
+                    foreach (int _arc_id in node_arcs.keys)
+                    {
+                        INeighborhoodArc arc = node_arcs[_arc_id];
+                        if (arc.neighbour_nic_addr == peer_address)
+                        {
+                            arc_id = _arc_id;
+                            break;
+                        }
+                    }
+                    if (arc_id == -1) return null;
+                    string k = @"$(my_id)-$(arc_id)";
+                    foreach (IdentityArc identity_arc in node_f[k])
+                    {
+                        if (identity_arc.peer_nodeid.equals(source_id))
+                        {
+                            return my_id.identity_skeleton;
+                        }
+                    }
+                    return null;
                 },
                 (/*NodeID*/ source_id, /*Gee.List<NodeID>*/ broadcast_set, /*string*/ peer_address, /*string*/ dev) => {
                     Gee.List<IAddressManagerSkeleton> ret;
-                    error("not yet implemented");
+                    error("not implemented yet");
                     /**L'utilizzatore del modulo restituisce una lista con gli skeleton relativi alle sue
                      * identità che sono incluse in identity_aware_broadcast_set, ma solo quelle che sono
                      * collegate tramite un arco-identità alla identità identity_aware_source_id e tale
@@ -708,6 +776,23 @@ namespace Netsukuku
         }
     }
 
+    void identity_aware_unicast(INeighborhoodArc arc, Identity my_id, NodeID its_id, string msg)
+    {
+        MyMessage _msg = new MyMessage(msg);
+        try {
+            neighborhood_manager.get_stub_identity_aware_unicast(arc, my_id.id, its_id).qspn_manager.send_etp(_msg, true);
+        } catch (QspnNotAcceptedError e) {
+            assert_not_reached();
+        } catch (StubError.DID_NOT_WAIT_REPLY e) {
+            // the method is void, so:
+            assert_not_reached();
+        } catch (StubError e) {
+            print(@"Got a stub-error: $(e.message)\n");
+        } catch (DeserializeError e) {
+            print(@"Got a deserialize-error: $(e.message)\n");
+        }
+    }
+
     errordomain MakePeerIdentityError {GENERIC}
     NodeID make_peer_id(string its_id) throws MakePeerIdentityError
     {
@@ -880,7 +965,33 @@ namespace Netsukuku
                     }
                     else if (_args[0] == "identity-aware-unicast" && _args.size == 6)
                     {
-                        error("not implemented yet");
+                        INeighborhoodArc arc;
+                        try {
+                            arc = find_arc(_args[1]);
+                        } catch (FindArcError e) {
+                            print(@"wrong arc-id '$(_args[1])'\n");
+                            continue;
+                        }
+                        Identity my_id;
+                        try {
+                            my_id = find_identity(_args[2]);
+                        } catch (FindIdentityError e) {
+                            print(@"wrong my-id '$(_args[2])'\n");
+                            continue;
+                        }
+                        NodeID its_id;
+                        try {
+                            its_id = make_peer_id(_args[3]);
+                        } catch (MakePeerIdentityError e) {
+                            print(@"wrong its-id '$(_args[3])'\n");
+                            continue;
+                        }
+                        if (_args[4] != "--")
+                        {
+                            print("bad args\n");
+                            continue;
+                        }
+                        identity_aware_unicast(arc, my_id, its_id, _args[5]);
                     }
                     else if (_args[0] == "identity-aware-broadcast" && _args.size >= 5)
                     {
