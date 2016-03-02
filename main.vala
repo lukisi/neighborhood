@@ -246,13 +246,13 @@ namespace Netsukuku
 
     public class FakeQspnManager : Object, IQspnManagerSkeleton
     {
-        public IQspnEtpMessage get_full_etp (IQspnAddress requesting_address, CallerInfo? caller = null)
+        public IQspnEtpMessage get_full_etp(IQspnAddress requesting_address, CallerInfo? caller = null)
         throws QspnNotAcceptedError, QspnBootstrapInProgressError
         {
             error("not in this test");
         }
 
-        public void send_etp (IQspnEtpMessage etp, bool is_full, CallerInfo? caller = null)
+        public void send_etp(IQspnEtpMessage etp, bool is_full, CallerInfo? caller = null)
         throws QspnNotAcceptedError
         {
             error("not implemented yet");
@@ -301,49 +301,49 @@ namespace Netsukuku
             print(@"As a whole-node, from arc-id=$(find_arc_id(arc)), got message: \"$(msg.msg)\".\n");
         }
 
-        public IPeerParticipantSet get_participant_set (int lvl, CallerInfo? caller = null)
+        public IPeerParticipantSet get_participant_set(int lvl, CallerInfo? caller = null)
         throws PeersInvalidRequest
         {
             error("not in this test");
         }
 
-        public IPeersRequest get_request (int msg_id, IPeerTupleNode respondant, CallerInfo? caller = null)
+        public IPeersRequest get_request(int msg_id, IPeerTupleNode respondant, CallerInfo? caller = null)
         throws PeersUnknownMessageError, PeersInvalidRequest
         {
             error("not in this test");
         }
 
-        public void set_failure (int msg_id, IPeerTupleGNode tuple, CallerInfo? caller = null)
+        public void set_failure(int msg_id, IPeerTupleGNode tuple, CallerInfo? caller = null)
         {
             error("not in this test");
         }
 
-        public void set_next_destination (int msg_id, IPeerTupleGNode tuple, CallerInfo? caller = null)
+        public void set_next_destination(int msg_id, IPeerTupleGNode tuple, CallerInfo? caller = null)
         {
             error("not in this test");
         }
 
-        public void set_non_participant (int msg_id, IPeerTupleGNode tuple, CallerInfo? caller = null)
+        public void set_non_participant(int msg_id, IPeerTupleGNode tuple, CallerInfo? caller = null)
         {
             error("not in this test");
         }
 
-        public void set_participant (int p_id, IPeerTupleGNode tuple, CallerInfo? caller = null)
+        public void set_participant(int p_id, IPeerTupleGNode tuple, CallerInfo? caller = null)
         {
             error("not in this test");
         }
 
-        public void set_redo_from_start (int msg_id, IPeerTupleNode respondant, CallerInfo? caller = null)
+        public void set_redo_from_start(int msg_id, IPeerTupleNode respondant, CallerInfo? caller = null)
         {
             error("not in this test");
         }
 
-        public void set_refuse_message (int msg_id, string refuse_message, IPeerTupleNode respondant, CallerInfo? caller = null)
+        public void set_refuse_message(int msg_id, string refuse_message, IPeerTupleNode respondant, CallerInfo? caller = null)
         {
             error("not in this test");
         }
 
-        public void set_response (int msg_id, IPeersResponse response, IPeerTupleNode respondant, CallerInfo? caller = null)
+        public void set_response(int msg_id, IPeersResponse response, IPeerTupleNode respondant, CallerInfo? caller = null)
         {
             error("not in this test");
         }
