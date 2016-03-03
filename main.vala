@@ -473,6 +473,14 @@ namespace Netsukuku
         public NodeID peer_nodeid;
         public string peer_mac;
         public string peer_linklocal;
+        public IdentityArc copy()
+        {
+            IdentityArc ret = new IdentityArc();
+            ret.peer_nodeid = peer_nodeid;
+            ret.peer_mac = peer_mac;
+            ret.peer_linklocal = peer_linklocal;
+            return ret;
+        }
     }
 
     AddressManagerForNode node_skeleton;
@@ -816,9 +824,17 @@ namespace Netsukuku
         }
     }
 
-    void add_identity(Identity my_old_id, NodeID my_new_id, Gee.List<NodeID> peer_old_id_set, Gee.List<NodeID> peer_new_id_set)
+    void add_identity(Identity my_old_id, NodeID my_new_id,
+            Gee.List<INeighborhoodArc> arc_id_set,
+            Gee.List<NodeID> peer_old_id_set, 
+            Gee.List<NodeID> peer_new_id_set,
+            Gee.List<string> peer_old_id_new_mac_set,
+            Gee.List<string> peer_old_id_new_linklocal_set)
     {
         assert(peer_old_id_set.size == peer_new_id_set.size);
+        assert(peer_old_id_set.size == peer_old_id_new_mac_set.size);
+        assert(peer_old_id_set.size == peer_old_id_new_linklocal_set.size);
+        assert(peer_old_id_set.size == arc_id_set.size);
         // Retrieve names of real devices
         ArrayList<string> devs = new ArrayList<string>();
         devs.add_all(node_in[@"$(my_old_id)"].keys);
@@ -826,6 +842,31 @@ namespace Netsukuku
         string new_ns_name;
         HashMap<string,HandledNic> new_nics;
         prepare_network_namespace(devs, out new_ns_name, out new_nics);
+        // Create new identity. Swap ns for new and old identities.
+        int _my_new_id = my_new_id.id;
+        string old_ns_name = node_ns[@"$(my_old_id)"];
+        create_identity(_my_new_id, old_ns_name);
+        node_ns[@"$(my_old_id)"] = new_ns_name;
+        // Swap handled nics.
+        foreach (string dev in devs)
+        {
+            node_in[@"$(_my_new_id)"][dev] = node_in[@"$(my_old_id)"][dev];
+            node_in[@"$(my_old_id)"][dev] = new_nics[dev];
+        }
+        // ...
+        foreach (int arc_id in node_arcs.keys)
+        {
+            INeighborhoodArc arc = node_arcs[arc_id];
+            // ir(arc) = arc.nic.dev
+            // HashMap<string,ArrayList<IdentityArc>> node_f
+            string k_old = @"$(my_old_id)-$(arc_id)";
+            string k_new = @"$(_my_new_id)-$(arc_id)";
+            foreach (IdentityArc w_old in node_f[k_old])
+            {
+                IdentityArc w_new = w_old.copy();
+                node_f[k_new].add(w_new);
+            }
+        }
         error("not implemented yet");
     }
 
@@ -1041,33 +1082,50 @@ namespace Netsukuku
                             print(@"wrong my-new-id '$(_args[2])'\n");
                             continue;
                         }
+                        ArrayList<INeighborhoodArc> arc_id_set = new ArrayList<INeighborhoodArc>();
                         ArrayList<NodeID> peer_old_id_set = new ArrayList<NodeID>();
                         ArrayList<NodeID> peer_new_id_set = new ArrayList<NodeID>();
+                        ArrayList<string> peer_old_id_new_mac_set = new ArrayList<string>();
+                        ArrayList<string> peer_new_id_new_linklocal_set = new ArrayList<string>();
                         bool need_break = false;
-                        for (int i = 3; i < _args.size; i+=2)
+                        for (int i = 3; i < _args.size; i+=5)
                         {
-                            if (i+1 < _args.size) {
+                            if (i+4 < _args.size) {
                                 print("bad args\n");
                                 need_break = true;
                                 break;
                             }
                             try {
-                                peer_old_id_set.add(make_peer_id(_args[i]));
-                            } catch (MakePeerIdentityError e) {
-                                print(@"wrong its-old-id '$(_args[i])'\n");
+                                arc_id_set.add(find_arc(_args[i]));
+                            } catch (FindArcError e) {
+                                print(@"wrong arc-id '$(_args[i])'\n");
                                 need_break = true;
                                 break;
                             }
                             try {
-                                peer_new_id_set.add(make_peer_id(_args[i+1]));
+                                peer_old_id_set.add(make_peer_id(_args[i+1]));
                             } catch (MakePeerIdentityError e) {
-                                print(@"wrong its-new-id '$(_args[i+1])'\n");
+                                print(@"wrong its-old-id '$(_args[i+1])'\n");
                                 need_break = true;
                                 break;
                             }
+                            try {
+                                peer_new_id_set.add(make_peer_id(_args[i+2]));
+                            } catch (MakePeerIdentityError e) {
+                                print(@"wrong its-new-id '$(_args[i+2])'\n");
+                                need_break = true;
+                                break;
+                            }
+                            peer_old_id_new_mac_set.add(_args[i+3]);
+                            peer_new_id_new_linklocal_set.add(_args[i+4]);
                         }
                         if (need_break) continue;
-                        add_identity(my_old_id, my_new_id, peer_old_id_set, peer_new_id_set);
+                        add_identity(my_old_id, my_new_id,
+                                arc_id_set,
+                                peer_old_id_set,
+                                peer_new_id_set,
+                                peer_old_id_new_mac_set,
+                                peer_new_id_new_linklocal_set);
                     }
                     else if (_args[0] == "remove-arc" && _args.size == 4)
                     {
@@ -1182,9 +1240,15 @@ Command list:
 > add-arc <arc-id> <my-id> <its-id> <peer-mac> <peer-linklocal>
   Adds an identity-arc.
 
-> add-id <my-old-id> <my-new-id> [<its-old-id> <its-new-id>] [...]
+> add-id <my-old-id>
+         <my-new-id>
+         [ <arc-id>
+           <peer-old-id>
+           <peer-new-id>
+           <peer-old-id-new-mac>
+           <peer-old-id-new-linklocal> ] [...]
   Creates a new identity for this node based on a previous one.
-  Provides the identification of any neighbor identity that has changed too.
+  Provides the data for any neighbor identity that has changed too.
 
 > remove-arc <arc-id> <my-id> <its-id>
   Removes an identity-arc.
