@@ -504,16 +504,7 @@ namespace Netsukuku
 
         Time n = Time.local(time_t());
         print(@"$(n)\n");
-        try {
-            TaskletCommandResult com_ret = client_tasklet.exec_command(@"sysctl net.ipv4.conf.all.rp_filter=0");
-            if (com_ret.exit_status != 0)
-                error(@"$(com_ret.stderr)\n");
-            com_ret = client_tasklet.exec_command(@"sysctl -n net.ipv4.conf.all.rp_filter");
-            if (com_ret.exit_status != 0)
-                error(@"$(com_ret.stderr)\n");
-            if (com_ret.stdout != "0\n")
-                error(@"Failed to unset net.ipv4.conf.all.rp_filter '$(com_ret.stdout)'\n");
-        } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
+        prepare_all_nics();
 
         // Prepare for storing stuff
         node_arcs = new HashMap<int,INeighborhoodArc>();
@@ -525,10 +516,7 @@ namespace Netsukuku
         node_in = new HashMap<string,HashMap<string,HandledNic>>();
         node_f = new HashMap<string,ArrayList<IdentityArc>>();
         // generate my first identity: NodeID and associations
-        Identity i_one = new Identity(first_id);
-        identities.add(i_one);
-        node_ns[@"$(i_one)"] = ""; // namespace default
-        node_in[@"$(i_one)"] = new HashMap<string,HandledNic>();
+        create_identity(first_id, ""); // in namespace default
 
         //
         node_skeleton = new AddressManagerForNode();
@@ -718,16 +706,7 @@ namespace Netsukuku
 
     void manage_nic(string dev)
     {
-        try {
-            TaskletCommandResult com_ret = client_tasklet.exec_command(@"sysctl net.ipv4.conf.$(dev).rp_filter=0");
-            if (com_ret.exit_status != 0)
-                error(@"$(com_ret.stderr)\n");
-            com_ret = client_tasklet.exec_command(@"sysctl -n net.ipv4.conf.$(dev).rp_filter");
-            if (com_ret.exit_status != 0)
-                error(@"$(com_ret.stderr)\n");
-            if (com_ret.stdout != "0\n")
-                error(@"Failed to unset net.ipv4.conf.$(dev).rp_filter '$(com_ret.stdout)'\n");
-        } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
+        prepare_nic(dev);
         // start listen UDP on dev
         t_udp_list.add(udp_listen(dlg, err, ntkd_port, dev));
         // prepare a NIC and run monitor
@@ -837,6 +816,52 @@ namespace Netsukuku
         }
     }
 
+    void add_identity(Identity my_old_id, NodeID my_new_id, Gee.List<NodeID> peer_old_id_set, Gee.List<NodeID> peer_new_id_set)
+    {
+        assert(peer_old_id_set.size == peer_new_id_set.size);
+        // Retrieve names of real devices
+        ArrayList<string> devs = new ArrayList<string>();
+        devs.add_all(node_in[@"$(my_old_id)"].keys);
+        // Prepare new namespace with pseudo-devices
+        string new_ns_name;
+        HashMap<string,HandledNic> new_nics;
+        prepare_network_namespace(devs, out new_ns_name, out new_nics);
+        error("not implemented yet");
+    }
+
+    int next_namespace = 0;
+    void prepare_network_namespace(Gee.List<string> devs, out string ns_name, out HashMap<string,HandledNic> hnics)
+    {
+        try {
+            int this_namespace = next_namespace++;
+            ns_name = @"ntkv$(this_namespace)";
+            TaskletCommandResult com_ret = client_tasklet.exec_command(@"ip netns add $(ns_name)");
+            if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+            prepare_all_nics(@"ip netns exec $(ns_name) ");
+            hnics = new HashMap<string,HandledNic>();
+            foreach (string dev in devs)
+            {
+                com_ret = client_tasklet.exec_command(@"ip link add dev $(ns_name)_$(dev) link $(dev) type macvlan");
+                if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+                com_ret = client_tasklet.exec_command(@"ip link set dev $(ns_name)_$(dev) netns $(ns_name)");
+                if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+                prepare_nic(@"$(ns_name)_$(dev)", @"ip netns exec $(ns_name) ");
+                HandledNic hnic = new HandledNic();
+                hnic.dev = @"$(ns_name)_$(dev)";
+                hnic.mac = macgetter.get_mac(hnic.dev).up();
+                // generate a random IP for this nic
+                int i2 = Random.int_range(0, 255);
+                int i3 = Random.int_range(0, 255);
+                hnic.linklocal = @"169.254.$(i2).$(i3)";
+                com_ret = client_tasklet.exec_command(@"ip netns exec $(ns_name) ip link set $(ns_name)_$(dev) up");
+                if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+                com_ret = client_tasklet.exec_command(@"ip netns exec $(ns_name) ip address add $(hnic.linklocal) dev $(ns_name)_$(dev)");
+                if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+                hnics[dev] = hnic;
+            }
+        } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
+    }
+
     errordomain MakePeerIdentityError {GENERIC}
     NodeID make_peer_id(string its_id) throws MakePeerIdentityError
     {
@@ -870,6 +895,46 @@ namespace Netsukuku
             if (_id.id.id == i_my_id) return _id;
         }
         throw new FindIdentityError.GENERIC("");
+    }
+
+    void create_identity(int id, string ns)
+    {
+        Identity i = new Identity(id);
+        identities.add(i);
+        node_ns[@"$(i)"] = ns;
+        node_in[@"$(i)"] = new HashMap<string,HandledNic>();
+    }
+
+    void prepare_all_nics(string ns_prefix="")
+    {
+        // disable rp_filter
+        set_sys_ctl("net.ipv4.conf.all.rp_filter", "0", ns_prefix);
+        // arp policies
+        set_sys_ctl("net.ipv4.conf.all.arp_ignore", "1", ns_prefix);
+        set_sys_ctl("net.ipv4.conf.all.arp_announce", "2", ns_prefix);
+    }
+
+    void prepare_nic(string nic, string ns_prefix="")
+    {
+        // disable rp_filter
+        set_sys_ctl(@"net.ipv4.conf.$(nic).rp_filter", "0", ns_prefix);
+        // arp policies
+        set_sys_ctl(@"net.ipv4.conf.$(nic).arp_ignore", "1", ns_prefix);
+        set_sys_ctl(@"net.ipv4.conf.$(nic).arp_announce", "2", ns_prefix);
+    }
+
+    void set_sys_ctl(string key, string val, string ns_prefix="")
+    {
+        try {
+            TaskletCommandResult com_ret = client_tasklet.exec_command(@"$(ns_prefix)sysctl $(key)=$(val)");
+            if (com_ret.exit_status != 0)
+                error(@"$(com_ret.stderr)\n");
+            com_ret = client_tasklet.exec_command(@"$(ns_prefix)sysctl -n $(key)");
+            if (com_ret.exit_status != 0)
+                error(@"$(com_ret.stderr)\n");
+            if (com_ret.stdout != @"$(val)\n")
+                error(@"Failed to set key '$(key)' to val '$(val)': now it reports '$(com_ret.stdout)'\n");
+        } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
     }
 
     class CommandLineInterfaceTasklet : Object, ITaskletSpawnable
@@ -962,7 +1027,47 @@ namespace Netsukuku
                     }
                     else if (_args[0] == "add-id" && _args.size >= 3)
                     {
-                        error("not implemented yet");
+                        Identity my_old_id;
+                        try {
+                            my_old_id = find_identity(_args[1]);
+                        } catch (FindIdentityError e) {
+                            print(@"wrong my-old-id '$(_args[1])'\n");
+                            continue;
+                        }
+                        NodeID my_new_id;
+                        try {
+                            my_new_id = make_peer_id(_args[2]);
+                        } catch (MakePeerIdentityError e) {
+                            print(@"wrong my-new-id '$(_args[2])'\n");
+                            continue;
+                        }
+                        ArrayList<NodeID> peer_old_id_set = new ArrayList<NodeID>();
+                        ArrayList<NodeID> peer_new_id_set = new ArrayList<NodeID>();
+                        bool need_break = false;
+                        for (int i = 3; i < _args.size; i+=2)
+                        {
+                            if (i+1 < _args.size) {
+                                print("bad args\n");
+                                need_break = true;
+                                break;
+                            }
+                            try {
+                                peer_old_id_set.add(make_peer_id(_args[i]));
+                            } catch (MakePeerIdentityError e) {
+                                print(@"wrong its-old-id '$(_args[i])'\n");
+                                need_break = true;
+                                break;
+                            }
+                            try {
+                                peer_new_id_set.add(make_peer_id(_args[i+1]));
+                            } catch (MakePeerIdentityError e) {
+                                print(@"wrong its-new-id '$(_args[i+1])'\n");
+                                need_break = true;
+                                break;
+                            }
+                        }
+                        if (need_break) continue;
+                        add_identity(my_old_id, my_new_id, peer_old_id_set, peer_new_id_set);
                     }
                     else if (_args[0] == "remove-arc" && _args.size == 4)
                     {
@@ -1077,7 +1182,7 @@ Command list:
 > add-arc <arc-id> <my-id> <its-id> <peer-mac> <peer-linklocal>
   Adds an identity-arc.
 
-> add-id <my-old-id> <my-new-id> [<arc-id> <its-old-id> <its-new-id>] [...]
+> add-id <my-old-id> <my-new-id> [<its-old-id> <its-new-id>] [...]
   Creates a new identity for this node based on a previous one.
   Provides the identification of any neighbor identity that has changed too.
 
