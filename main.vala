@@ -296,7 +296,7 @@ namespace Netsukuku
             {
                 error("send_etp: the caller did not prepare a message suited for identity-aware module");
             }
-            print(@"As identity $(id), from peer-identity $(identity_aware_peer_id.id) on device $(dev), got message: \"$(msg.msg)\".\n");
+            print(@"As identity $(identity_aware_my_id.id), from peer-identity $(identity_aware_peer_id.id) on device $(dev), got message: \"$(msg.msg)\".\n");
         }
     }
 
@@ -544,7 +544,6 @@ namespace Netsukuku
         // create neighborhood_manager
         neighborhood_manager = new NeighborhoodManager(
                 (/*NodeID*/ source_id, /*NodeID*/ unicast_id, /*string*/ peer_address) => {
-                    IAddressManagerSkeleton? ret;
                     Identity my_id;
                     try {
                         my_id = find_identity(@"$(unicast_id.id)");
@@ -573,13 +572,38 @@ namespace Netsukuku
                     return null;
                 },
                 (/*NodeID*/ source_id, /*Gee.List<NodeID>*/ broadcast_set, /*string*/ peer_address, /*string*/ dev) => {
-                    Gee.List<IAddressManagerSkeleton> ret;
-                    error("not implemented yet");
-                    /**L'utilizzatore del modulo restituisce una lista con gli skeleton relativi alle sue
-                     * identità che sono incluse in identity_aware_broadcast_set, ma solo quelle che sono
-                     * collegate tramite un arco-identità alla identità identity_aware_source_id e tale
-                     * arco-identità si appoggia all'arco reale formato su dev con peer_address.
-                    */
+                    ArrayList<IAddressManagerSkeleton> ret = new ArrayList<IAddressManagerSkeleton>();
+                    int arc_id = -1;
+                    foreach (int _arc_id in node_arcs.keys)
+                    {
+                        INeighborhoodArc arc = node_arcs[_arc_id];
+                        if (arc.neighbour_nic_addr == peer_address)
+                        {
+                            arc_id = _arc_id;
+                            break;
+                        }
+                    }
+                    if (arc_id == -1) return ret;
+                    ArrayList<Identity> my_id_set = new ArrayList<Identity>();
+                    foreach (NodeID one_id in broadcast_set)
+                    {
+                        try {
+                            my_id_set.add(find_identity(@"$(one_id.id)"));
+                        } catch (FindIdentityError e) {
+                        }
+                    }
+                    foreach (Identity my_id in my_id_set)
+                    {
+                        string k = @"$(my_id)-$(arc_id)";
+                        foreach (IdentityArc identity_arc in node_f[k])
+                        {
+                            if (identity_arc.peer_nodeid.equals(source_id))
+                            {
+                                ret.add(my_id.identity_skeleton);
+                            }
+                        }
+                    }
+                    return ret;
                 },
                 /*IAddressManagerSkeleton*/ node_skeleton,
                 max_arcs, new MyStubFactory(), new MyIPRouteManager());
@@ -793,6 +817,26 @@ namespace Netsukuku
         }
     }
 
+    void identity_aware_broadcast(Identity my_id, Gee.List<NodeID> id_set, string msg)
+    {
+        MyMessage _msg = new MyMessage(msg);
+        try {
+            MissedHandler miss = new MissedHandler();
+            neighborhood_manager.get_stub_identity_aware_broadcast(my_id.id, id_set, miss).qspn_manager.send_etp(_msg, true);
+        } catch (QspnNotAcceptedError e) {
+            assert_not_reached();
+        } catch (StubError.DID_NOT_WAIT_REPLY e) {
+            // the method is broadcast, so:
+            assert_not_reached();
+        } catch (StubError e) {
+            // the method is broadcast, so:
+            assert_not_reached();
+        } catch (DeserializeError e) {
+            // the method is broadcast, so:
+            assert_not_reached();
+        }
+    }
+
     errordomain MakePeerIdentityError {GENERIC}
     NodeID make_peer_id(string its_id) throws MakePeerIdentityError
     {
@@ -995,7 +1039,29 @@ namespace Netsukuku
                     }
                     else if (_args[0] == "identity-aware-broadcast" && _args.size >= 5)
                     {
-                        error("not implemented yet");
+                        Identity my_id;
+                        try {
+                            my_id = find_identity(_args[1]);
+                        } catch (FindIdentityError e) {
+                            print(@"wrong my-id '$(_args[1])'\n");
+                            continue;
+                        }
+                        ArrayList<NodeID> id_set = new ArrayList<NodeID>();
+                        for (int i = 2; i < _args.size-2; i++)
+                        {
+                            try {
+                                id_set.add(make_peer_id(_args[i]));
+                            } catch (MakePeerIdentityError e) {
+                                print(@"wrong its-id '$(_args[i])'\n");
+                            }
+                        }
+                        if (id_set.is_empty) continue;
+                        if (_args[_args.size-2] != "--")
+                        {
+                            print("bad args\n");
+                            continue;
+                        }
+                        identity_aware_broadcast(my_id, id_set, _args[_args.size-1]);
                     }
                     else if (_args[0] == "help")
                     {
