@@ -483,9 +483,25 @@ namespace Netsukuku
         }
     }
 
+    class MigrationData : Object
+    {
+        public int migration_id;
+        public NodeID old_id;
+        public NodeID new_id;
+        public HashMap<string,MigrationDeviceData> devices;
+    }
+
+    class MigrationDeviceData : Object
+    {
+        public string real_mac;
+        public string old_id_new_dev;
+        public string old_id_new_mac;
+        public string old_id_new_linklocal;
+    }
+
     class MigratedWithMe : Object
     {
-        public INeighborhoodArc arc_id;
+        public INeighborhoodArc arc;
         public NodeID peer_old_id;
         public NodeID peer_new_id;
         public string peer_old_id_new_mac;
@@ -833,15 +849,52 @@ namespace Netsukuku
         }
     }
 
+    MigrationData prepare_migration_data(Gee.List<string> devs, string prefix,
+                int migration_id,
+                NodeID old_id,
+                NodeID new_id)
+    {
+        MigrationData ret = new MigrationData();
+        ret.migration_id = migration_id;
+        ret.old_id = old_id;
+        ret.new_id = new_id;
+        ret.devices = new HashMap<string,MigrationDeviceData>();
+        foreach (string dev in devs)
+        {
+            MigrationDeviceData pseudodev = new MigrationDeviceData();
+            pseudodev.real_mac = macgetter.get_mac(dev).up(); // do we need?
+            pseudodev.old_id_new_dev = @"$(prefix)_$(dev)";
+            try {
+                TaskletCommandResult com_ret = client_tasklet.exec_command(
+                        @"ip link add dev $(pseudodev.old_id_new_dev) link $(dev) type macvlan");
+                if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+            } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
+            pseudodev.old_id_new_mac = macgetter.get_mac(pseudodev.old_id_new_dev).up();
+            // generate a random IP for this pseudodev
+            int i2 = Random.int_range(0, 255);
+            int i3 = Random.int_range(0, 255);
+            pseudodev.old_id_new_linklocal = @"169.254.$(i2).$(i3)";
+            ret.devices[dev] = pseudodev;
+        }
+        return ret;
+    }
+
+    int next_namespace = 0;
     void add_identity(Identity my_old_id, NodeID my_new_id, ArrayList<MigratedWithMe> migr_set)
     {
+        // Choose a name for namespace.
+        int this_namespace = next_namespace++;
+        string new_ns_name = @"ntkv$(this_namespace)";
         // Retrieve names of real devices
         ArrayList<string> devs = new ArrayList<string>();
         devs.add_all(node_in[@"$(my_old_id)"].keys);
-        // Prepare new namespace with pseudo-devices
-        string new_ns_name;
+        // The unique code for the migration is not used in this proof-of-concept
+        int migration_id = 12;
+        // Prepare migration_data
+        MigrationData migration_data = prepare_migration_data(devs, new_ns_name, migration_id, my_old_id.id, my_new_id);
+        // Prepare new namespace and move pseudo-devices
         HashMap<string,HandledNic> new_nics;
-        prepare_network_namespace(devs, out new_ns_name, out new_nics);
+        prepare_network_namespace(migration_data, new_ns_name, out new_nics);
         // Create new identity. Swap ns for new and old identities.
         int _my_new_id = my_new_id.id;
         string old_ns_name = node_ns[@"$(my_old_id)"];
@@ -868,8 +921,9 @@ namespace Netsukuku
                 // Did w_old.peer_nodeid migrate too?
                 foreach (MigratedWithMe migr in migr_set)
                 {
-                    if (migr.arc_id == arc_id && migr.peer_old_id.equals(w_old.peer_nodeid))
+                    if (migr.arc == arc && migr.peer_old_id.equals(w_old.peer_nodeid))
                     {
+                        
                         //TODO
                         break;
                     }
@@ -879,33 +933,26 @@ namespace Netsukuku
         error("not implemented yet");
     }
 
-    int next_namespace = 0;
-    void prepare_network_namespace(Gee.List<string> devs, out string ns_name, out HashMap<string,HandledNic> hnics)
+    void prepare_network_namespace(MigrationData migration_data, string ns_name, out HashMap<string,HandledNic> hnics)
     {
         try {
-            int this_namespace = next_namespace++;
-            ns_name = @"ntkv$(this_namespace)";
             TaskletCommandResult com_ret = client_tasklet.exec_command(@"ip netns add $(ns_name)");
             if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
             prepare_all_nics(@"ip netns exec $(ns_name) ");
             hnics = new HashMap<string,HandledNic>();
-            foreach (string dev in devs)
+            foreach (string dev in migration_data.devices.keys)
             {
-                com_ret = client_tasklet.exec_command(@"ip link add dev $(ns_name)_$(dev) link $(dev) type macvlan");
+                MigrationDeviceData dev_data = migration_data.devices[dev];
+                com_ret = client_tasklet.exec_command(@"ip link set dev $(dev_data.old_id_new_dev) netns $(ns_name)");
                 if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
-                com_ret = client_tasklet.exec_command(@"ip link set dev $(ns_name)_$(dev) netns $(ns_name)");
-                if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
-                prepare_nic(@"$(ns_name)_$(dev)", @"ip netns exec $(ns_name) ");
+                prepare_nic(dev_data.old_id_new_dev, @"ip netns exec $(ns_name) ");
                 HandledNic hnic = new HandledNic();
-                hnic.dev = @"$(ns_name)_$(dev)";
-                hnic.mac = macgetter.get_mac(hnic.dev).up();
-                // generate a random IP for this nic
-                int i2 = Random.int_range(0, 255);
-                int i3 = Random.int_range(0, 255);
-                hnic.linklocal = @"169.254.$(i2).$(i3)";
-                com_ret = client_tasklet.exec_command(@"ip netns exec $(ns_name) ip link set $(ns_name)_$(dev) up");
+                hnic.dev = dev_data.old_id_new_dev;
+                hnic.mac = dev_data.old_id_new_mac;
+                hnic.linklocal = dev_data.old_id_new_linklocal;
+                com_ret = client_tasklet.exec_command(@"ip netns exec $(ns_name) ip link set $(hnic.dev) up");
                 if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
-                com_ret = client_tasklet.exec_command(@"ip netns exec $(ns_name) ip address add $(hnic.linklocal) dev $(ns_name)_$(dev)");
+                com_ret = client_tasklet.exec_command(@"ip netns exec $(ns_name) ip address add $(hnic.linklocal) dev $(hnic.dev)");
                 if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
                 hnics[dev] = hnic;
             }
@@ -1103,7 +1150,7 @@ namespace Netsukuku
                             MigratedWithMe migr = new MigratedWithMe();
                             migr_set.add(migr);
                             try {
-                                migr.arc_id = find_arc(_args[i]);
+                                migr.arc = find_arc(_args[i]);
                             } catch (FindArcError e) {
                                 print(@"wrong arc-id '$(_args[i])'\n");
                                 need_break = true;
@@ -1124,7 +1171,7 @@ namespace Netsukuku
                                 break;
                             }
                             migr.peer_old_id_new_mac = _args[i+3];
-                            migr.peer_new_id_new_linklocal = _args[i+4];
+                            migr.peer_old_id_new_linklocal = _args[i+4];
                         }
                         if (need_break) continue;
                         add_identity(my_old_id, my_new_id, migr_set);
