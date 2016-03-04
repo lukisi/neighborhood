@@ -879,32 +879,51 @@ namespace Netsukuku
         return ret;
     }
 
-    int next_namespace = 0;
-    void add_identity(Identity my_old_id, NodeID my_new_id, ArrayList<MigratedWithMe> migr_set)
+    int a_i_next_namespace = 0;
+    string a_i_new_ns_name;
+    ArrayList<string> a_i_devs;
+    MigrationData a_i_migration_data;
+    Identity a_i_my_old_id;
+    NodeID a_i_my_new_id;
+    void prepare_add_identity(Identity my_old_id, NodeID my_new_id)
     {
+        a_i_my_old_id = my_old_id;
+        a_i_my_new_id = my_new_id;
         // Choose a name for namespace.
-        int this_namespace = next_namespace++;
-        string new_ns_name = @"ntkv$(this_namespace)";
+        int this_namespace = a_i_next_namespace++;
+        a_i_new_ns_name = @"ntkv$(this_namespace)";
         // Retrieve names of real devices
-        ArrayList<string> devs = new ArrayList<string>();
-        devs.add_all(node_in[@"$(my_old_id)"].keys);
+        a_i_devs = new ArrayList<string>();
+        a_i_devs.add_all(node_in[@"$(my_old_id)"].keys);
         // The unique code for the migration is not used in this proof-of-concept
         int migration_id = 12;
         // Prepare migration_data
-        MigrationData migration_data = prepare_migration_data(devs, new_ns_name, migration_id, my_old_id.id, my_new_id);
+        MigrationData a_i_migration_data = prepare_migration_data(a_i_devs, a_i_new_ns_name, migration_id, my_old_id.id, my_new_id);
+        // Show on console collected data
+        foreach (string dev in a_i_migration_data.devices.keys)
+        {
+            MigrationDeviceData dev_data = a_i_migration_data.devices[dev];
+            print(@"From real interface $(dev) ($(dev_data.real_mac))\n");
+            print(@"     constructed pseudo-interface $(dev_data.old_id_new_dev) ($(dev_data.old_id_new_mac))\n");
+            print(@"     which will get $(dev_data.old_id_new_linklocal).\n");
+        }
+    }
+
+    void finish_add_identity(ArrayList<MigratedWithMe> migr_set)
+    {
         // Prepare new namespace and move pseudo-devices
         HashMap<string,HandledNic> new_nics;
-        prepare_network_namespace(migration_data, new_ns_name, out new_nics);
+        prepare_network_namespace(a_i_migration_data, a_i_new_ns_name, out new_nics);
         // Create new identity. Swap ns for new and old identities.
-        int _my_new_id = my_new_id.id;
-        string old_ns_name = node_ns[@"$(my_old_id)"];
+        int _my_new_id = a_i_my_new_id.id;
+        string old_ns_name = node_ns[@"$(a_i_my_old_id)"];
         create_identity(_my_new_id, old_ns_name);
-        node_ns[@"$(my_old_id)"] = new_ns_name;
+        node_ns[@"$(a_i_my_old_id)"] = a_i_new_ns_name;
         // Swap handled nics.
-        foreach (string dev in devs)
+        foreach (string dev in a_i_devs)
         {
-            node_in[@"$(_my_new_id)"][dev] = node_in[@"$(my_old_id)"][dev];
-            node_in[@"$(my_old_id)"][dev] = new_nics[dev];
+            node_in[@"$(_my_new_id)"][dev] = node_in[@"$(a_i_my_old_id)"][dev];
+            node_in[@"$(a_i_my_old_id)"][dev] = new_nics[dev];
         }
         // Duplicate arcs and modify them in old identity
         foreach (int arc_id in node_arcs.keys)
@@ -912,7 +931,7 @@ namespace Netsukuku
             INeighborhoodArc arc = node_arcs[arc_id];
             // ir(arc) = arc.nic.dev
             // HashMap<string,ArrayList<IdentityArc>> node_f
-            string k_old = @"$(my_old_id)-$(arc_id)";
+            string k_old = @"$(a_i_my_old_id)-$(arc_id)";
             string k_new = @"$(_my_new_id)-$(arc_id)";
             foreach (IdentityArc w_old in node_f[k_old])
             {
@@ -1122,7 +1141,7 @@ namespace Netsukuku
                         }
                         add_identity_arc(arc, my_id, its_id, _args[4], _args[5]);
                     }
-                    else if (_args[0] == "add-id" && _args.size >= 3)
+                    else if (_args[0] == "prepare-add-id" && _args.size == 3)
                     {
                         Identity my_old_id;
                         try {
@@ -1138,9 +1157,13 @@ namespace Netsukuku
                             print(@"wrong my-new-id '$(_args[2])'\n");
                             continue;
                         }
+                        prepare_add_identity(my_old_id, my_new_id);
+                    }
+                    else if (_args[0] == "finish-add-id")
+                    {
                         ArrayList<MigratedWithMe> migr_set = new ArrayList<MigratedWithMe>();
                         bool need_break = false;
-                        for (int i = 3; i < _args.size; i+=5)
+                        for (int i = 1; i < _args.size; i+=5)
                         {
                             if (i+4 < _args.size) {
                                 print("bad args\n");
@@ -1174,7 +1197,7 @@ namespace Netsukuku
                             migr.peer_old_id_new_linklocal = _args[i+4];
                         }
                         if (need_break) continue;
-                        add_identity(my_old_id, my_new_id, migr_set);
+                        finish_add_identity(migr_set);
                     }
                     else if (_args[0] == "remove-arc" && _args.size == 4)
                     {
@@ -1289,8 +1312,10 @@ Command list:
 > add-arc <arc-id> <my-id> <its-id> <peer-mac> <peer-linklocal>
   Adds an identity-arc.
 
-> add-id <my-old-id>
-         <my-new-id>
+> prepare-add-id <my-old-id> <my-new-id>
+  Prepare pseudo-interfaces and collect data to make a new identity.
+
+> finish-add-id
          [ <arc-id>
            <peer-old-id>
            <peer-new-id>
