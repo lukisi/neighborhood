@@ -483,6 +483,15 @@ namespace Netsukuku
         }
     }
 
+    class MigratedWithMe : Object
+    {
+        public INeighborhoodArc arc_id;
+        public NodeID peer_old_id;
+        public NodeID peer_new_id;
+        public string peer_old_id_new_mac;
+        public string peer_old_id_new_linklocal;
+    }
+
     AddressManagerForNode node_skeleton;
     MyServerDelegate dlg;
     MyServerErrorHandler err;
@@ -824,17 +833,8 @@ namespace Netsukuku
         }
     }
 
-    void add_identity(Identity my_old_id, NodeID my_new_id,
-            Gee.List<INeighborhoodArc> arc_id_set,
-            Gee.List<NodeID> peer_old_id_set, 
-            Gee.List<NodeID> peer_new_id_set,
-            Gee.List<string> peer_old_id_new_mac_set,
-            Gee.List<string> peer_old_id_new_linklocal_set)
+    void add_identity(Identity my_old_id, NodeID my_new_id, ArrayList<MigratedWithMe> migr_set)
     {
-        assert(peer_old_id_set.size == peer_new_id_set.size);
-        assert(peer_old_id_set.size == peer_old_id_new_mac_set.size);
-        assert(peer_old_id_set.size == peer_old_id_new_linklocal_set.size);
-        assert(peer_old_id_set.size == arc_id_set.size);
         // Retrieve names of real devices
         ArrayList<string> devs = new ArrayList<string>();
         devs.add_all(node_in[@"$(my_old_id)"].keys);
@@ -853,7 +853,7 @@ namespace Netsukuku
             node_in[@"$(_my_new_id)"][dev] = node_in[@"$(my_old_id)"][dev];
             node_in[@"$(my_old_id)"][dev] = new_nics[dev];
         }
-        // ...
+        // Duplicate arcs and modify them in old identity
         foreach (int arc_id in node_arcs.keys)
         {
             INeighborhoodArc arc = node_arcs[arc_id];
@@ -865,6 +865,15 @@ namespace Netsukuku
             {
                 IdentityArc w_new = w_old.copy();
                 node_f[k_new].add(w_new);
+                // Did w_old.peer_nodeid migrate too?
+                foreach (MigratedWithMe migr in migr_set)
+                {
+                    if (migr.arc_id == arc_id && migr.peer_old_id.equals(w_old.peer_nodeid))
+                    {
+                        //TODO
+                        break;
+                    }
+                }
             }
         }
         error("not implemented yet");
@@ -1082,11 +1091,7 @@ namespace Netsukuku
                             print(@"wrong my-new-id '$(_args[2])'\n");
                             continue;
                         }
-                        ArrayList<INeighborhoodArc> arc_id_set = new ArrayList<INeighborhoodArc>();
-                        ArrayList<NodeID> peer_old_id_set = new ArrayList<NodeID>();
-                        ArrayList<NodeID> peer_new_id_set = new ArrayList<NodeID>();
-                        ArrayList<string> peer_old_id_new_mac_set = new ArrayList<string>();
-                        ArrayList<string> peer_new_id_new_linklocal_set = new ArrayList<string>();
+                        ArrayList<MigratedWithMe> migr_set = new ArrayList<MigratedWithMe>();
                         bool need_break = false;
                         for (int i = 3; i < _args.size; i+=5)
                         {
@@ -1095,37 +1100,34 @@ namespace Netsukuku
                                 need_break = true;
                                 break;
                             }
+                            MigratedWithMe migr = new MigratedWithMe();
+                            migr_set.add(migr);
                             try {
-                                arc_id_set.add(find_arc(_args[i]));
+                                migr.arc_id = find_arc(_args[i]);
                             } catch (FindArcError e) {
                                 print(@"wrong arc-id '$(_args[i])'\n");
                                 need_break = true;
                                 break;
                             }
                             try {
-                                peer_old_id_set.add(make_peer_id(_args[i+1]));
+                                migr.peer_old_id = make_peer_id(_args[i+1]);
                             } catch (MakePeerIdentityError e) {
                                 print(@"wrong its-old-id '$(_args[i+1])'\n");
                                 need_break = true;
                                 break;
                             }
                             try {
-                                peer_new_id_set.add(make_peer_id(_args[i+2]));
+                                migr.peer_new_id = make_peer_id(_args[i+2]);
                             } catch (MakePeerIdentityError e) {
                                 print(@"wrong its-new-id '$(_args[i+2])'\n");
                                 need_break = true;
                                 break;
                             }
-                            peer_old_id_new_mac_set.add(_args[i+3]);
-                            peer_new_id_new_linklocal_set.add(_args[i+4]);
+                            migr.peer_old_id_new_mac = _args[i+3];
+                            migr.peer_new_id_new_linklocal = _args[i+4];
                         }
                         if (need_break) continue;
-                        add_identity(my_old_id, my_new_id,
-                                arc_id_set,
-                                peer_old_id_set,
-                                peer_new_id_set,
-                                peer_old_id_new_mac_set,
-                                peer_new_id_new_linklocal_set);
+                        add_identity(my_old_id, my_new_id, migr_set);
                     }
                     else if (_args[0] == "remove-arc" && _args.size == 4)
                     {
