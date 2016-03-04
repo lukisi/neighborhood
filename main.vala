@@ -942,8 +942,9 @@ namespace Netsukuku
                 {
                     if (migr.arc == arc && migr.peer_old_id.equals(w_old.peer_nodeid))
                     {
-                        
-                        //TODO
+                        w_old.peer_mac = migr.peer_old_id_new_mac;
+                        w_old.peer_linklocal = migr.peer_old_id_new_linklocal;
+                        w_new.peer_nodeid = migr.peer_new_id;
                         break;
                     }
                 }
@@ -1182,14 +1183,14 @@ namespace Netsukuku
                             try {
                                 migr.peer_old_id = make_peer_id(_args[i+1]);
                             } catch (MakePeerIdentityError e) {
-                                print(@"wrong its-old-id '$(_args[i+1])'\n");
+                                print(@"wrong peer-old-id '$(_args[i+1])'\n");
                                 need_break = true;
                                 break;
                             }
                             try {
                                 migr.peer_new_id = make_peer_id(_args[i+2]);
                             } catch (MakePeerIdentityError e) {
-                                print(@"wrong its-new-id '$(_args[i+2])'\n");
+                                print(@"wrong peer-new-id '$(_args[i+2])'\n");
                                 need_break = true;
                                 break;
                             }
