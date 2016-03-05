@@ -937,6 +937,7 @@ namespace Netsukuku
             // HashMap<string,ArrayList<IdentityArc>> node_f
             string k_old = @"$(a_i_my_old_id)-$(arc_id)";
             string k_new = @"$(_my_new_id)-$(arc_id)";
+            node_f[k_new] = new ArrayList<IdentityArc>();
             foreach (IdentityArc w_old in node_f[k_old])
             {
                 IdentityArc w_new = w_old.copy();
@@ -954,7 +955,6 @@ namespace Netsukuku
                 }
             }
         }
-        error("not implemented yet");
     }
 
     void prepare_network_namespace(MigrationData migration_data, string ns_name, out HashMap<string,HandledNic> hnics)
