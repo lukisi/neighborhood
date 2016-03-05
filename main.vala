@@ -713,6 +713,9 @@ namespace Netsukuku
             if (do_me_exit) break;
         }
         print("\n");
+
+        cleanup();
+
         // This will destroy the object NeighborhoodManager and hence call
         //  its stop_monitor_all.
         // Beware that node_skeleton.neighborhood_manager
@@ -882,7 +885,7 @@ namespace Netsukuku
     int a_i_next_namespace = 0;
     string a_i_new_ns_name;
     ArrayList<string> a_i_devs;
-    MigrationData a_i_migration_data;
+    MigrationData? a_i_migration_data=null;
     Identity a_i_my_old_id;
     NodeID a_i_my_new_id;
     void prepare_add_identity(Identity my_old_id, NodeID my_new_id)
@@ -914,6 +917,7 @@ namespace Netsukuku
         // Prepare new namespace and move pseudo-devices
         HashMap<string,HandledNic> new_nics;
         prepare_network_namespace(a_i_migration_data, a_i_new_ns_name, out new_nics);
+        a_i_migration_data = null;
         // Create new identity. Swap ns for new and old identities.
         int _my_new_id = a_i_my_new_id.id;
         string old_ns_name = node_ns[@"$(a_i_my_old_id)"];
@@ -1020,6 +1024,43 @@ namespace Netsukuku
         identities.add(i);
         node_ns[@"$(i)"] = ns;
         node_in[@"$(i)"] = new HashMap<string,HandledNic>();
+    }
+
+    void cleanup()
+    {
+        // cleanup pseudo device in preparation for a new identity that was not finished.
+        if (a_i_migration_data != null)
+        {
+            foreach (string dev in a_i_migration_data.devices.keys)
+            {
+                string pseudodev = a_i_migration_data.devices[dev].old_id_new_dev;
+                try {
+                    TaskletCommandResult com_ret = client_tasklet.exec_command(
+                            @"ip link delete $(pseudodev) type macvlan");
+                    if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+                } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
+            }
+        }
+        // cleanup pseudo device and namespaces for all non-main identities.
+        foreach (Identity i in identities) if (node_ns[@"$(i)"] != "")
+        {
+            string ns_name = node_ns[@"$(i)"];
+            foreach (string dev in node_in[@"$(i)"].keys)
+            {
+                HandledNic hnic = node_in[@"$(i)"][dev];
+                assert(hnic.dev != dev);
+                try {
+                    TaskletCommandResult com_ret = client_tasklet.exec_command(
+                            @"ip netns exec $(ns_name) ip link delete $(hnic.dev) type macvlan");
+                    if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+                } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
+            }
+            try {
+                TaskletCommandResult com_ret = client_tasklet.exec_command(
+                        @"ip netns del $(ns_name)");
+                if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+            } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
+        }
     }
 
     void prepare_all_nics(string ns_prefix="")
@@ -1162,6 +1203,11 @@ namespace Netsukuku
                     }
                     else if (_args[0] == "finish-add-id")
                     {
+                        if (a_i_migration_data == null)
+                        {
+                            print("use prepare-add-id first.'\n");
+                            continue;
+                        }
                         ArrayList<MigratedWithMe> migr_set = new ArrayList<MigratedWithMe>();
                         bool need_break = false;
                         for (int i = 1; i < _args.size; i+=5)
