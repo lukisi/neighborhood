@@ -898,7 +898,7 @@ namespace Netsukuku
         // The unique code for the migration is not used in this proof-of-concept
         int migration_id = 12;
         // Prepare migration_data
-        MigrationData a_i_migration_data = prepare_migration_data(a_i_devs, a_i_new_ns_name, migration_id, my_old_id.id, my_new_id);
+        a_i_migration_data = prepare_migration_data(a_i_devs, a_i_new_ns_name, migration_id, my_old_id.id, my_new_id);
         // Show on console collected data
         foreach (string dev in a_i_migration_data.devices.keys)
         {
@@ -1166,7 +1166,7 @@ namespace Netsukuku
                         bool need_break = false;
                         for (int i = 1; i < _args.size; i+=5)
                         {
-                            if (i+4 < _args.size) {
+                            if (i+5 > _args.size) {
                                 print("bad args\n");
                                 need_break = true;
                                 break;
