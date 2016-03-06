@@ -907,8 +907,8 @@ namespace Netsukuku
         {
             MigrationDeviceData dev_data = a_i_migration_data.devices[dev];
             print(@"From real interface $(dev) ($(dev_data.real_mac))\n");
-            print(@"     constructed pseudo-interface $(dev_data.old_id_new_dev) ($(dev_data.old_id_new_mac))\n");
-            print(@"     which will get $(dev_data.old_id_new_linklocal).\n");
+            print(@"     constructed pseudo-interface $(dev_data.old_id_new_dev) with MAC $(dev_data.old_id_new_mac)\n");
+            print(@"     which will get $(dev_data.old_id_new_linklocal)\n");
         }
     }
 
