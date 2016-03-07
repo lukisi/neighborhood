@@ -775,8 +775,18 @@ namespace Netsukuku
         node_f[k].add(identity_arc);
     }
 
-    void change_data_identity_arc(IdentityArc identity_arc, string peer_mac, string peer_linklocal)
+    void change_data_identity_arc(INeighborhoodArc arc, Identity my_id, IdentityArc identity_arc, string peer_mac, string peer_linklocal)
     {
+        string dev = arc.nic.dev;
+        string ns = node_ns[@"$(my_id)"];
+        string mylinklocal = node_in[@"$(my_id)"][dev].linklocal;
+        string mydev = node_in[@"$(my_id)"][dev].dev;
+        string cmd = @"ip route add $(peer_linklocal) dev $(mydev) src $(mylinklocal)";
+        if (ns != "") cmd = @"ip netns exec $(ns) $(cmd)";
+        try {
+            TaskletCommandResult com_ret = client_tasklet.exec_command(cmd);
+            if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+        } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
         identity_arc.peer_mac = peer_mac;
         identity_arc.peer_linklocal = peer_linklocal;
     }
@@ -966,8 +976,23 @@ namespace Netsukuku
                         break;
                     }
                 }
+                string dev = arc.nic.dev;
+                string ns = node_ns[@"$(a_i_my_old_id)"];
+                string mylinklocal = node_in[@"$(a_i_my_old_id)"][dev].linklocal;
+                string mydev = node_in[@"$(a_i_my_old_id)"][dev].dev;
+                string cmd = @"ip route add $(w_old.peer_linklocal) dev $(mydev) src $(mylinklocal)";
+                if (ns != "") cmd = @"ip netns exec $(ns) $(cmd)";
+                try {
+                    TaskletCommandResult com_ret = client_tasklet.exec_command(cmd);
+                    if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+                } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
             }
         }
+    }
+
+    void remove_identity(Identity my_id)
+    {
+        error("not implemented yet");
     }
 
     void prepare_network_namespace(MigrationData migration_data, string ns_name, out HashMap<string,HandledNic> hnics)
@@ -1246,7 +1271,7 @@ namespace Netsukuku
                             print("couldnt find arc\n");
                             continue;
                         }
-                        change_data_identity_arc(identity_arc, _args[4], _args[5]);
+                        change_data_identity_arc(arc, my_id, identity_arc, _args[4], _args[5]);
                     }
                     else if (_args[0] == "prepare-add-id" && _args.size == 3)
                     {
@@ -1345,7 +1370,14 @@ namespace Netsukuku
                     }
                     else if (_args[0] == "remove-id" && _args.size == 2)
                     {
-                        error("not implemented yet");
+                        Identity my_id;
+                        try {
+                            my_id = find_identity(_args[1]);
+                        } catch (FindIdentityError e) {
+                            print(@"wrong my-id '$(_args[1])'\n");
+                            continue;
+                        }
+                        remove_identity(my_id);
                     }
                     else if (_args[0] == "whole-node-unicast" && _args.size == 4)
                     {
