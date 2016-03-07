@@ -775,6 +775,12 @@ namespace Netsukuku
         node_f[k].add(identity_arc);
     }
 
+    void change_data_identity_arc(IdentityArc identity_arc, string peer_mac, string peer_linklocal)
+    {
+        identity_arc.peer_mac = peer_mac;
+        identity_arc.peer_linklocal = peer_linklocal;
+    }
+
     void whole_node_unicast(INeighborhoodArc arc, string msg)
     {
         MyMessage _msg = new MyMessage(msg);
@@ -1018,6 +1024,26 @@ namespace Netsukuku
         throw new FindIdentityError.GENERIC("");
     }
 
+    errordomain FindIdentityArcError {GENERIC}
+    IdentityArc find_identity_arc(Identity my_id, INeighborhoodArc arc, NodeID its_id)
+    throws FindIdentityArcError
+    {
+        int arc_id = find_arc_id(arc);
+        string k = @"$(my_id)-$(arc_id)";
+        if (node_f.has_key(k))
+        {
+            foreach (IdentityArc identity_arc in node_f[k])
+            {
+                if (identity_arc.peer_nodeid.equals(its_id))
+                {
+                    return identity_arc;
+                }
+            }
+            throw new FindIdentityArcError.GENERIC("");
+        }
+        throw new FindIdentityArcError.GENERIC("");
+    }
+
     void create_identity(int id, string ns)
     {
         Identity i = new Identity(id);
@@ -1182,6 +1208,38 @@ namespace Netsukuku
                             continue;
                         }
                         add_identity_arc(arc, my_id, its_id, _args[4], _args[5]);
+                    }
+                    else if (_args[0] == "change-data-arc" && _args.size == 6)
+                    {
+                        INeighborhoodArc arc;
+                        try {
+                            arc = find_arc(_args[1]);
+                        } catch (FindArcError e) {
+                            print(@"wrong arc-id '$(_args[1])'\n");
+                            continue;
+                        }
+                        Identity my_id;
+                        try {
+                            my_id = find_identity(_args[2]);
+                        } catch (FindIdentityError e) {
+                            print(@"wrong my-id '$(_args[2])'\n");
+                            continue;
+                        }
+                        NodeID its_id;
+                        try {
+                            its_id = make_peer_id(_args[3]);
+                        } catch (MakePeerIdentityError e) {
+                            print(@"wrong its-id '$(_args[3])'\n");
+                            continue;
+                        }
+                        IdentityArc identity_arc;
+                        try {
+                            identity_arc = find_identity_arc(my_id, arc, its_id);
+                        } catch (FindIdentityArcError e) {
+                            print("couldnt find arc\n");
+                            continue;
+                        }
+                        change_data_identity_arc(identity_arc, _args[4], _args[5]);
                     }
                     else if (_args[0] == "prepare-add-id" && _args.size == 3)
                     {
@@ -1358,6 +1416,9 @@ Command list:
 
 > add-arc <arc-id> <my-id> <its-id> <peer-mac> <peer-linklocal>
   Adds an identity-arc.
+
+> change-data-arc <arc-id> <my-id> <its-id> <peer-mac> <peer-linklocal>
+  Changes MAC and linklocal for an identity-arc.
 
 > prepare-add-id <my-old-id> <my-new-id>
   Prepare pseudo-interfaces and collect data to make a new identity.
