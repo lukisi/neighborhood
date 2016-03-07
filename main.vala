@@ -781,6 +781,13 @@ namespace Netsukuku
         identity_arc.peer_linklocal = peer_linklocal;
     }
 
+    void remove_identity_arc(INeighborhoodArc arc, Identity my_id, IdentityArc identity_arc)
+    {
+        int arc_id = find_arc_id(arc);
+        string k = @"$(my_id)-$(arc_id)";
+        node_f[k].remove(identity_arc);
+    }
+
     void whole_node_unicast(INeighborhoodArc arc, string msg)
     {
         MyMessage _msg = new MyMessage(msg);
@@ -1306,7 +1313,35 @@ namespace Netsukuku
                     }
                     else if (_args[0] == "remove-arc" && _args.size == 4)
                     {
-                        error("not implemented yet");
+                        INeighborhoodArc arc;
+                        try {
+                            arc = find_arc(_args[1]);
+                        } catch (FindArcError e) {
+                            print(@"wrong arc-id '$(_args[1])'\n");
+                            continue;
+                        }
+                        Identity my_id;
+                        try {
+                            my_id = find_identity(_args[2]);
+                        } catch (FindIdentityError e) {
+                            print(@"wrong my-id '$(_args[2])'\n");
+                            continue;
+                        }
+                        NodeID its_id;
+                        try {
+                            its_id = make_peer_id(_args[3]);
+                        } catch (MakePeerIdentityError e) {
+                            print(@"wrong its-id '$(_args[3])'\n");
+                            continue;
+                        }
+                        IdentityArc identity_arc;
+                        try {
+                            identity_arc = find_identity_arc(my_id, arc, its_id);
+                        } catch (FindIdentityArcError e) {
+                            print("couldnt find arc\n");
+                            continue;
+                        }
+                        remove_identity_arc(arc, my_id, identity_arc);
                     }
                     else if (_args[0] == "remove-id" && _args.size == 2)
                     {
