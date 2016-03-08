@@ -992,7 +992,30 @@ namespace Netsukuku
 
     void remove_identity(Identity my_id)
     {
-        error("not implemented yet");
+        assert(node_ns[@"$(my_id)"] != "");
+        try {
+            string ns = node_ns[@"$(my_id)"];
+            string cmd = @"ip netns exec $(ns) ip route flush table main";
+            TaskletCommandResult com_ret = client_tasklet.exec_command(cmd);
+            if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+            foreach (string dev in node_in[@"$(my_id)"].keys)
+            {
+                string pseudodev = node_in[@"$(my_id)"][dev].dev;
+                cmd = @"ip netns exec $(ns) ip link delete $(pseudodev) type macvlan";
+                com_ret = client_tasklet.exec_command(cmd);
+                if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+            }
+            cmd = @"ip netns del $(ns)";
+            com_ret = client_tasklet.exec_command(cmd);
+            if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+        } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
+        // remove identity-arcs
+        foreach (int arc_id in node_arcs.keys)
+        {
+            string k = @"$(my_id)-$(arc_id)";
+            node_f.unset(k);
+        }
+        delete_identity(my_id);
     }
 
     void prepare_network_namespace(MigrationData migration_data, string ns_name, out HashMap<string,HandledNic> hnics)
@@ -1082,6 +1105,13 @@ namespace Netsukuku
         identities.add(i);
         node_ns[@"$(i)"] = ns;
         node_in[@"$(i)"] = new HashMap<string,HandledNic>();
+    }
+
+    void delete_identity(Identity i)
+    {
+        node_in.unset(@"$(i)");
+        node_ns.unset(@"$(i)");
+        identities.remove(i);
     }
 
     void cleanup()
