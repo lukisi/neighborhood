@@ -793,6 +793,17 @@ namespace Netsukuku
 
     void remove_identity_arc(INeighborhoodArc arc, Identity my_id, IdentityArc identity_arc)
     {
+        string dev = arc.nic.dev;
+        string ns = node_ns[@"$(my_id)"];
+        string mylinklocal = node_in[@"$(my_id)"][dev].linklocal;
+        string mydev = node_in[@"$(my_id)"][dev].dev;
+        string peer_linklocal = identity_arc.peer_linklocal;
+        string cmd = @"ip route del $(peer_linklocal) dev $(mydev) src $(mylinklocal)";
+        if (ns != "") cmd = @"ip netns exec $(ns) $(cmd)";
+        try {
+            TaskletCommandResult com_ret = client_tasklet.exec_command(cmd);
+            if (com_ret.exit_status != 0) error(@"$(com_ret.stderr)\n");
+        } catch (Error e) {error(@"Unable to spawn a command: $(e.message)");}
         int arc_id = find_arc_id(arc);
         string k = @"$(my_id)-$(arc_id)";
         node_f[k].remove(identity_arc);
