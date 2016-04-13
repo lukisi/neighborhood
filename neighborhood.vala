@@ -20,7 +20,7 @@ using Gee;
 using TaskletSystem;
 using LibNeighborhoodInternals;
 
-namespace Netsukuku
+namespace Netsukuku.Neighborhood
 {
     /* Serializable internal classes
      */

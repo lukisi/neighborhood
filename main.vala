@@ -18,10 +18,12 @@
 
 using Gee;
 using TaskletSystem;
+using Netsukuku;
+using Netsukuku.Neighborhood;
 
 const uint16 ntkd_port = 60269;
 
-namespace Netsukuku
+namespace Netsukuku.Neighborhood.App
 {
     class MyIPRouteManager : Object, INeighborhoodIPRouteManager
     {

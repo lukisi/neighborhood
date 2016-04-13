@@ -17,6 +17,7 @@
  */
 
 using Netsukuku;
+using Netsukuku.Neighborhood;
 using Gee;
 
 namespace LibNeighborhoodInternals
