@@ -214,6 +214,12 @@ namespace Netsukuku
         {
             error("AddressManagerForIdentity.coordinator_manager_getter: not in this test");
         }
+
+        protected virtual unowned IIdentityManagerSkeleton
+        identity_manager_getter()
+        {
+            error("AddressManagerForIdentity.identity_manager_getter: not in this test");
+        }
     }
 
     class AddressManagerForNode : Object, IAddressManagerSkeleton
@@ -241,6 +247,12 @@ namespace Netsukuku
         coordinator_manager_getter()
         {
             error("AddressManagerForNode.coordinator_manager_getter: not in this test");
+        }
+
+        protected virtual unowned IIdentityManagerSkeleton
+        identity_manager_getter()
+        {
+            error("AddressManagerForNode.identity_manager_getter: not in this test");
         }
     }
 
@@ -298,6 +310,16 @@ namespace Netsukuku
             }
             print(@"As identity $(identity_aware_my_id.id), from peer-identity $(identity_aware_peer_id.id) on device $(dev), got message: \"$(msg.msg)\".\n");
         }
+
+		public void got_destroy(CallerInfo? caller = null)
+		{
+		    error("not in this test");
+		}
+
+		public void got_prepare_destroy(CallerInfo? caller = null)
+		{
+		    error("not in this test");
+		}
     }
 
     public class FakePeersManager : Object, IPeersManagerSkeleton
