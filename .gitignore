@@ -11,6 +11,12 @@ Makefile
 testsuites/test_neighbours/test_neighbours.c
 testsuites/test_neighbours/base_dispatcher.c
 testsuites/test_serialize_helpers/test_serialize_helpers.c
+neighborhoodclient
+test_serialize_helpers
+*.log
+*.trs
+.dirstamp
+*.o
 *.lo
 *.la
 .deps
