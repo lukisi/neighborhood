@@ -6,7 +6,7 @@ noinst_LTLIBRARIES = \
 	libneighborhood.la \
 	$(NULL)
 
-noinst_PROGRAMS =  \
+EXTRA_PROGRAMS =  \
 	neighborhoodclient \
 	$(NULL)
 
