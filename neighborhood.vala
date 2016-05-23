@@ -585,7 +585,7 @@ namespace Netsukuku.Neighborhood
                     if (! nop_check)
                     {
                         // This arc is not working.
-                        mgr.remove_my_arc(arc);
+                        mgr.remove_my_arc(arc, false);
                         return null;
                     }
 
