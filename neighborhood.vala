@@ -426,7 +426,7 @@ namespace Netsukuku.Neighborhood
         // New arc formed.
         public signal void arc_added(INeighborhoodArc arc);
         // An arc is going to be removed.
-        public signal void arc_removing(INeighborhoodArc arc);
+        public signal void arc_removing(INeighborhoodArc arc, bool is_still_usable);
         // An arc removed.
         public signal void arc_removed(INeighborhoodArc arc);
         // An arc changed its cost.
@@ -991,7 +991,7 @@ namespace Netsukuku.Neighborhood
             // do just once
             if (! arcs.contains(_arc)) return;
             // signal removing arc
-            if (_arc.available) arc_removing(arc);
+            if (_arc.available) arc_removing(arc, do_tell);
             // remove the fixed address of the neighbor
             ip_mgr.remove_neighbor(
                         /*my_addr*/ local_addresses[_arc.my_nic.dev],
