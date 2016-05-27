@@ -432,7 +432,7 @@ namespace Netsukuku.Neighborhood
         // An arc changed its cost.
         public signal void arc_changed(INeighborhoodArc arc);
         // Address removed from a NIC, no more handling.
-        public signal void nic_address_unset(string dev);
+        public signal void nic_address_unset(string dev, string address);
 
         public void start_monitor(INeighborhoodNetworkInterface nic)
         {
@@ -481,7 +481,7 @@ namespace Netsukuku.Neighborhood
             // remove local address
             string local_address = local_addresses[dev];
             ip_mgr.remove_address(local_address, dev);
-            nic_address_unset(dev);
+            nic_address_unset(dev, local_address);
             // cleanup private members
             monitoring_devs.unset(dev);
             nics.unset(dev);
@@ -1224,12 +1224,6 @@ namespace Netsukuku.Neighborhood
             {
                 stop_monitor(dev);
             }
-        }
-
-        ~NeighborhoodManager()
-        {
-            print("~NeighborhoodManager()\n");
-            stop_monitor_all();
         }
     }
 }
