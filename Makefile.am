@@ -13,12 +13,10 @@ EXTRA_PROGRAMS =  \
 check_PROGRAMS = \
 	test_serialize_helpers \
 	$(NULL)
-#	test_neighbours
 
 TESTS = \
 	test_serialize_helpers \
 	$(NULL)
-#	test_neighbours
 
 libmacgetter_la_SOURCES = \
 	mac-getter/hw.c \
@@ -100,39 +98,6 @@ neighborhoodclient_LDADD = \
 	$(PTHTASKLET_LIBS) \
 	$(NTKDRPC_LIBS) \
 	$(builddir)/libmacgetter.la \
-	$(builddir)/libneighborhood.la \
-	$(NULL)
-
-test_neighbours_SOURCES = \
-	testsuites/test_neighbours/test_neighbours.vala \
-	neighborhood.vapi \
-	$(NULL)
-
-test_neighbours_VALAFLAGS = \
-	--pkg gee-0.8 \
-	--pkg tasklet-system \
-	--pkg pth-tasklet \
-	--pkg ntkd-common\
-	--pkg ntkdrpc\
-	$(NULL)
-
-test_neighbours_CPPFLAGS = \
-	-w \
-	$(GOBJECT_CFLAGS) \
-	$(GEE_CFLAGS) \
-	$(TASKLETSYSTEM_CFLAGS) \
-	$(PTHTASKLET_CFLAGS) \
-	$(NTKDCOMMON_CFLAGS) \
-	$(NTKDRPC_CFLAGS) \
-	$(NULL)
-
-test_neighbours_LDADD = \
-	$(GOBJECT_LIBS) \
-	$(GEE_LIBS) \
-	$(TASKLETSYSTEM_LIBS) \
-	$(PTHTASKLET_LIBS) \
-	$(NTKDCOMMON_LIBS) \
-	$(NTKDRPC_LIBS) \
 	$(builddir)/libneighborhood.la \
 	$(NULL)
 
