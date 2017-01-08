@@ -1,3 +1,4 @@
+*~
 neighborhood.c
 serialize_helpers.c
 interfaces.c
@@ -41,5 +42,6 @@ missing
 test-driver
 compile
 .valencia
+.buildconfig
 debug
 finalbuild
