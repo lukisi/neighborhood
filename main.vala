@@ -941,7 +941,7 @@ namespace Netsukuku.Neighborhood.App
             // generate a random IP for this pseudodev
             int i2 = Random.int_range(0, 255);
             int i3 = Random.int_range(0, 255);
-            pseudodev.old_id_new_linklocal = @"169.254.$(i2).$(i3)";
+            pseudodev.old_id_new_linklocal = @"192.168.$(i2).$(i3)";
             ret.devices[dev] = pseudodev;
         }
         return ret;

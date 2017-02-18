@@ -1127,7 +1127,7 @@ namespace Netsukuku.Neighborhood
             if (! (_its_id is NeighborhoodNodeID)) return;
             NeighborhoodNodeID its_id = (NeighborhoodNodeID)_its_id;
             // The message comes from my_nic and its mac is mac.
-            // TODO check that nic_addr is in 169.254.0.0/10 class.
+            // TODO check that nic_addr is in the same range used by the delegate new_linklocal_address.
             // TODO check that nic_addr is not conflicting with mine or my neighbors' ones.
             string my_dev = rpc_caller.dev;
             debug(@"request_arc: through $(my_dev)");
