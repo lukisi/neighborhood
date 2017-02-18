@@ -651,7 +651,14 @@ namespace Netsukuku.Neighborhood.App
                     return ret;
                 },
                 /*IAddressManagerSkeleton*/ node_skeleton,
-                max_arcs, new MyStubFactory(), new MyIPRouteManager());
+                max_arcs, new MyStubFactory(), new MyIPRouteManager(),
+                () => {
+                    // generate a random IP in this range
+                    int i2 = Random.int_range(0, 255);
+                    int i3 = Random.int_range(0, 255);
+                    string local_address = @"192.128.$(i2).$(i3)";
+                    return @"";
+                });
         node_skeleton.neighborhood_manager = neighborhood_manager;
         // connect signals
         neighborhood_manager.nic_address_set.connect(
