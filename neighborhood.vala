@@ -394,7 +394,7 @@ namespace Netsukuku.Neighborhood
                                    int max_arcs,
                                    INeighborhoodStubFactory stub_factory,
                                    INeighborhoodIPRouteManager ip_mgr,
-                                   NewLinklocalAddress new_linklocal_address)
+                                   owned NewLinklocalAddress new_linklocal_address)
         {
             this.get_identity_skeleton = get_identity_skeleton;
             this.get_identity_skeleton_set = get_identity_skeleton_set;
@@ -408,7 +408,7 @@ namespace Netsukuku.Neighborhood
             monitoring_devs = new HashMap<string, ITaskletHandle>();
             arcs = new ArrayList<NeighborhoodRealArc>();
             monitoring_arcs = new HashMap<NeighborhoodRealArc, ITaskletHandle>();
-            this.new_linklocal_address = new_linklocal_address;
+            this.new_linklocal_address = (owned)new_linklocal_address;
         }
 
         private unowned GetIdentitySkeletonFunc get_identity_skeleton;
