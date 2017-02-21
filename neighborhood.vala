@@ -192,6 +192,8 @@ namespace Netsukuku.Neighborhood
     /* Interfaces for requirements
      */
 
+    public delegate string NewLinklocalAddress();
+
     public errordomain NeighborhoodGetRttError {
         GENERIC
     }
@@ -391,7 +393,8 @@ namespace Netsukuku.Neighborhood
                                    IAddressManagerSkeleton node_skeleton,
                                    int max_arcs,
                                    INeighborhoodStubFactory stub_factory,
-                                   INeighborhoodIPRouteManager ip_mgr)
+                                   INeighborhoodIPRouteManager ip_mgr,
+                                   owned NewLinklocalAddress new_linklocal_address)
         {
             this.get_identity_skeleton = get_identity_skeleton;
             this.get_identity_skeleton_set = get_identity_skeleton_set;
@@ -405,6 +408,7 @@ namespace Netsukuku.Neighborhood
             monitoring_devs = new HashMap<string, ITaskletHandle>();
             arcs = new ArrayList<NeighborhoodRealArc>();
             monitoring_arcs = new HashMap<NeighborhoodRealArc, ITaskletHandle>();
+            this.new_linklocal_address = (owned)new_linklocal_address;
         }
 
         private unowned GetIdentitySkeletonFunc get_identity_skeleton;
@@ -419,6 +423,7 @@ namespace Netsukuku.Neighborhood
         private HashMap<string, ITaskletHandle> monitoring_devs;
         private ArrayList<NeighborhoodRealArc> arcs;
         private HashMap<NeighborhoodRealArc, ITaskletHandle> monitoring_arcs;
+        private NewLinklocalAddress new_linklocal_address;
 
         // Signals:
         // New address assigned to a NIC.
@@ -445,10 +450,8 @@ namespace Netsukuku.Neighborhood
                 assert(present.dev != dev);
                 assert(present.mac != mac);
             }
-            // generate a random IP for this nic
-            int i2 = Random.int_range(0, 255);
-            int i3 = Random.int_range(0, 255);
-            string local_address = @"169.254.$(i2).$(i3)";
+            // get a new linklocal IP for this nic
+            string local_address = new_linklocal_address();
             ip_mgr.add_address(local_address, dev);
             nic_address_set(dev, local_address);
             // start monitor
@@ -1124,7 +1127,7 @@ namespace Netsukuku.Neighborhood
             if (! (_its_id is NeighborhoodNodeID)) return;
             NeighborhoodNodeID its_id = (NeighborhoodNodeID)_its_id;
             // The message comes from my_nic and its mac is mac.
-            // TODO check that nic_addr is in 169.254.0.0/10 class.
+            // TODO check that nic_addr is in the same range used by the delegate new_linklocal_address.
             // TODO check that nic_addr is not conflicting with mine or my neighbors' ones.
             string my_dev = rpc_caller.dev;
             debug(@"request_arc: through $(my_dev)");

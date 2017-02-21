@@ -651,7 +651,9 @@ namespace Netsukuku.Neighborhood.App
                     return ret;
                 },
                 /*IAddressManagerSkeleton*/ node_skeleton,
-                max_arcs, new MyStubFactory(), new MyIPRouteManager());
+                max_arcs, new MyStubFactory(), new MyIPRouteManager(),
+                /*NewLinklocalAddress*/
+                () => @"169.254.$(Random.int_range(0, 255)).$(Random.int_range(0, 255))");
         node_skeleton.neighborhood_manager = neighborhood_manager;
         // connect signals
         neighborhood_manager.nic_address_set.connect(
