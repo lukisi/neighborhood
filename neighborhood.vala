@@ -29,7 +29,7 @@ namespace Netsukuku.Neighborhood
     {
         public NeighborhoodNodeID()
         {
-            id = Random.int_range(1, int.MAX);
+            id = PRNGen.int_range(1, int.MAX);
         }
         public int id {get; set;}
 
@@ -385,6 +385,11 @@ namespace Netsukuku.Neighborhood
             typeof(IdentityAwareUnicastID).class_peek();
             typeof(IdentityAwareBroadcastID).class_peek();
             tasklet = _tasklet;
+        }
+
+        public static void init_rngen(IRandomNumberGenerator? rngen=null, int? seed=null)
+        {
+            PRNGen.init_rngen(rngen, seed);
         }
 
         public NeighborhoodManager(

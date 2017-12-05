@@ -1,4 +1,5 @@
 neighborhood.c
+rngen.c
 serialize_helpers.c
 interfaces.c
 main.c
