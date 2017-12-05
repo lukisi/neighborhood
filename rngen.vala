@@ -46,7 +46,7 @@ namespace Netsukuku.Neighborhood
         code of the library) to the PRNGen (static) methods will initialize by calling
         first the function with *null* and *null*.
         */
-        public static void init_rngen(IRandomNumberGenerator? rngen=null, int? seed=null)
+        public static void init_rngen(IRandomNumberGenerator? rngen=null, uint32? seed=null)
         {
             if (rngen != null) _rng = rngen;
             else if (seed == null) _rng = new DefaultRandomNumberGenerator();

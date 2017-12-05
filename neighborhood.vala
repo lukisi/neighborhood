@@ -387,7 +387,7 @@ namespace Netsukuku.Neighborhood
             tasklet = _tasklet;
         }
 
-        public static void init_rngen(IRandomNumberGenerator? rngen=null, int? seed=null)
+        public static void init_rngen(IRandomNumberGenerator? rngen=null, uint32? seed=null)
         {
             PRNGen.init_rngen(rngen, seed);
         }
