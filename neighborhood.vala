@@ -1107,6 +1107,15 @@ namespace Netsukuku.Neighborhood
             }
             if (! (refused || failed))
             {
+                // Did I already make an arc? Check again to avoid race condition.
+                foreach (NeighborhoodRealArc arc in arcs)
+                {
+                    if (arc.neighbour_id.id == its_id.id)
+                    {
+                        // I already formed this arc.
+                        return;
+                    }
+                }
                 // Let's make an arc
                 NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, mac, nic_addr, my_nic);
                 arcs.add(new_arc);
