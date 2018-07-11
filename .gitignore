@@ -1,4 +1,7 @@
 neighborhood.c
+api.c
+serializables.c
+structs.c
 rngen.c
 serialize_helpers.c
 interfaces.c

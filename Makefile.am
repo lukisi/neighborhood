@@ -31,6 +31,9 @@ libmacgetter_la_LIBADD = \
 
 libneighborhood_la_SOURCES = \
 	neighborhood.vala \
+	api.vala \
+	serializables.vala \
+	structs.vala \
 	rngen.vala \
 	serialize_helpers.vala \
 	$(NULL)

@@ -22,352 +22,6 @@ using LibNeighborhoodInternals;
 
 namespace Netsukuku.Neighborhood
 {
-    /* Serializable internal classes
-     */
-
-    internal class NeighborhoodNodeID : Object, INeighborhoodNodeIDMessage
-    {
-        public NeighborhoodNodeID()
-        {
-            id = PRNGen.int_range(1, int.MAX);
-        }
-        public int id {get; set;}
-
-        public bool equals(NeighborhoodNodeID other)
-        {
-            return id == other.id;
-        }
-    }
-
-    internal class WholeNodeSourceID : Object, ISourceID
-    {
-        public WholeNodeSourceID(NeighborhoodNodeID id)
-        {
-            this.id = id;
-        }
-        public NeighborhoodNodeID id {get; set;}
-    }
-
-    internal class WholeNodeUnicastID : Object, IUnicastID
-    {
-    }
-
-    internal class WholeNodeBroadcastID : Object, Json.Serializable, IBroadcastID
-    {
-        public WholeNodeBroadcastID(Gee.List<NeighborhoodNodeID> id_set)
-        {
-            this.id_set = new ArrayList<NeighborhoodNodeID>((a, b) => a.equals(b));
-            this.id_set.add_all(id_set);
-        }
-        public Gee.List<NeighborhoodNodeID> id_set {get; set;}
-
-        public bool deserialize_property
-        (string property_name,
-         out GLib.Value @value,
-         GLib.ParamSpec pspec,
-         Json.Node property_node)
-        {
-            @value = 0;
-            switch (property_name) {
-            case "id_set":
-            case "id-set":
-                try {
-                    @value = deserialize_list_neighborhood_node_id(property_node);
-                } catch (HelperDeserializeError e) {
-                    return false;
-                }
-                break;
-            default:
-                return false;
-            }
-            return true;
-        }
-
-        public unowned GLib.ParamSpec? find_property
-        (string name)
-        {
-            return get_class().find_property(name);
-        }
-
-        public Json.Node serialize_property
-        (string property_name,
-         GLib.Value @value,
-         GLib.ParamSpec pspec)
-        {
-            switch (property_name) {
-            case "id_set":
-            case "id-set":
-                return serialize_list_neighborhood_node_id((Gee.List<NeighborhoodNodeID>)@value);
-            default:
-                error(@"wrong param $(property_name)");
-            }
-        }
-    }
-
-    internal class NoArcWholeNodeUnicastID : Object, IUnicastID
-    {
-        public NoArcWholeNodeUnicastID(NeighborhoodNodeID id, string mac)
-        {
-            this.id = id;
-            this.mac = mac;
-        }
-        public NeighborhoodNodeID id {get; set;}
-        public string mac {get; set;}
-    }
-
-    internal class EveryWholeNodeBroadcastID : Object, IBroadcastID
-    {
-    }
-
-    internal class IdentityAwareSourceID : Object, ISourceID
-    {
-        public IdentityAwareSourceID(NodeID id)
-        {
-            this.id = id;
-        }
-        public NodeID id {get; set;}
-    }
-
-    internal class IdentityAwareUnicastID : Object, IUnicastID
-    {
-        public IdentityAwareUnicastID(NodeID id)
-        {
-            this.id = id;
-        }
-        public NodeID id {get; set;}
-    }
-
-    internal class IdentityAwareBroadcastID : Object, Json.Serializable, IBroadcastID
-    {
-        public IdentityAwareBroadcastID(Gee.List<NodeID> id_set)
-        {
-            this.id_set = new ArrayList<NodeID>((a, b) => a.equals(b));
-            this.id_set.add_all(id_set);
-        }
-        public Gee.List<NodeID> id_set {get; set;}
-
-        public bool deserialize_property
-        (string property_name,
-         out GLib.Value @value,
-         GLib.ParamSpec pspec,
-         Json.Node property_node)
-        {
-            @value = 0;
-            switch (property_name) {
-            case "id_set":
-            case "id-set":
-                try {
-                    @value = deserialize_list_node_id(property_node);
-                } catch (HelperDeserializeError e) {
-                    return false;
-                }
-                break;
-            default:
-                return false;
-            }
-            return true;
-        }
-
-        public unowned GLib.ParamSpec? find_property
-        (string name)
-        {
-            return get_class().find_property(name);
-        }
-
-        public Json.Node serialize_property
-        (string property_name,
-         GLib.Value @value,
-         GLib.ParamSpec pspec)
-        {
-            switch (property_name) {
-            case "id_set":
-            case "id-set":
-                return serialize_list_node_id((Gee.List<NodeID>)@value);
-            default:
-                error(@"wrong param $(property_name)");
-            }
-        }
-    }
-
-    /* Interfaces for requirements
-     */
-
-    public delegate string NewLinklocalAddress();
-
-    public errordomain NeighborhoodGetRttError {
-        GENERIC
-    }
-
-    public interface INeighborhoodNetworkInterface : Object
-    {
-        public abstract string dev {get;}
-        public abstract string mac {get;}
-        public abstract long measure_rtt(string peer_addr, string peer_mac, string my_dev, string my_addr) throws NeighborhoodGetRttError;
-    }
-
-    public interface INeighborhoodArc : Object
-    {
-        public abstract string neighbour_mac {get;}
-        public abstract string neighbour_nic_addr {get;}
-        public abstract long cost {get;}
-        public abstract INeighborhoodNetworkInterface nic {get;}
-    }
-
-    internal class NeighborhoodRealArc : Object, INeighborhoodArc
-    {
-        private NeighborhoodNodeID _neighbour_id;
-        private string _mac;
-        private string _nic_addr;
-        private long _cost;
-        private INeighborhoodNetworkInterface _my_nic;
-        public bool available;
-
-        public NeighborhoodRealArc(NeighborhoodNodeID neighbour_id,
-                       string mac,
-                       string nic_addr,
-                       INeighborhoodNetworkInterface my_nic)
-        {
-            _neighbour_id = neighbour_id;
-            _mac = mac;
-            _nic_addr = nic_addr;
-            _my_nic = my_nic;
-            available = false;
-        }
-
-        public INeighborhoodNetworkInterface my_nic {
-            get {
-                return _my_nic;
-            }
-        }
-
-        public NeighborhoodNodeID neighbour_id {
-            get {
-                return _neighbour_id;
-            }
-        }
-
-        public void set_cost(long cost)
-        {
-            _cost = cost;
-            available = true;
-        }
-
-        /* Public interface INeighborhoodArc
-         */
-
-        public string neighbour_mac {
-            get {
-                return _mac;
-            }
-        }
-
-        public string neighbour_nic_addr {
-            get {
-                return _nic_addr;
-            }
-        }
-
-        public long cost {
-            get {
-                return _cost;
-            }
-        }
-
-        public INeighborhoodNetworkInterface nic {
-            get {
-                return _my_nic;
-            }
-        }
-    }
-
-    public interface INeighborhoodMissingArcHandler : Object
-    {
-        public abstract void missing(INeighborhoodArc arc);
-    }
-
-    /* This interface is implemented by an object passed to the Neighbor manager
-     * which uses it to actually obtain a stub to send messages to other nodes.
-     */
-    public interface INeighborhoodStubFactory : Object
-    {
-        public abstract IAddressManagerStub
-                        get_broadcast(
-                            Gee.List<string> devs,
-                            Gee.List<string> src_ips,
-                            ISourceID source_id,
-                            IBroadcastID broadcast_id,
-                            IAckCommunicator? ack_com=null
-                        );
-
-        public  IAddressManagerStub
-                get_broadcast_to_dev(
-                    string dev,
-                    string src_ip,
-                    ISourceID source_id,
-                    IBroadcastID broadcast_id,
-                    IAckCommunicator? ack_com=null
-                )
-        {
-            var _devs = new ArrayList<string>.wrap({dev});
-            var _src_ips = new ArrayList<string>.wrap({src_ip});
-            return get_broadcast(_devs, _src_ips, source_id, broadcast_id, ack_com);
-        }
-
-        public abstract IAddressManagerStub
-                        get_unicast(
-                            string dev,
-                            string src_ip,
-                            ISourceID source_id,
-                            IUnicastID unicast_id,
-                            bool wait_reply=true
-                        );
-
-        public abstract IAddressManagerStub
-                        get_tcp(
-                            string dest,
-                            ISourceID source_id,
-                            IUnicastID unicast_id,
-                            bool wait_reply=true
-                        );
-    }
-
-    /* This interface is implemented by an object passed to the Neighbor manager
-     * which uses it to manage addresses and routes of the O.S. (specifically in
-     * order to have a fixed address for each NIC and be able to contact via TCP
-     * its neighbors with their fixed addresses)
-     */
-    public interface INeighborhoodIPRouteManager : Object
-    {
-        public abstract void add_address(
-                            string my_addr,
-                            string my_dev
-                        );
-
-        public abstract void add_neighbor(
-                            string my_addr,
-                            string my_dev,
-                            string neighbor_addr
-                        );
-
-        public abstract void remove_neighbor(
-                            string my_addr,
-                            string my_dev,
-                            string neighbor_addr
-                        );
-
-        public abstract void remove_address(
-                            string my_addr,
-                            string my_dev
-                        );
-    }
-
-    public delegate
-        IAddressManagerSkeleton? GetIdentitySkeletonFunc
-        (NodeID source_id, NodeID unicast_id, string peer_address);
-    public delegate
-        Gee.List<IAddressManagerSkeleton> GetIdentitySkeletonSetFunc
-        (NodeID source_id, Gee.List<NodeID> broadcast_set, string peer_address, string dev);
-
     internal ITasklet tasklet;
     public class NeighborhoodManager : Object, INeighborhoodManagerSkeleton
     {
@@ -521,7 +175,7 @@ namespace Netsukuku.Neighborhood
                     try
                     {
                         IAddressManagerStub bc =
-                            mgr.get_stub_for_here_i_am(nic.dev, local_address);
+                            mgr.get_stub_for_broadcast_to_dev(nic.dev, local_address);
                             // nothing to do for missing ACK from known neighbours
                             // because this message would be not important for them anyway.
                         bc.neighborhood_manager.here_i_am(mgr.my_id, nic.mac, local_address);
@@ -964,7 +618,7 @@ namespace Netsukuku.Neighborhood
          * by the module itself (hence private) to reach all nodes in a NIC.
          */
         private IAddressManagerStub
-        get_stub_for_here_i_am(
+        get_stub_for_broadcast_to_dev(
             string dev, string local_address)
         {
             ArrayList<string> devs = new ArrayList<string>.wrap({dev});
@@ -972,22 +626,6 @@ namespace Netsukuku.Neighborhood
             WholeNodeSourceID source_id = new WholeNodeSourceID(my_id);
             EveryWholeNodeBroadcastID broadcast_id = new EveryWholeNodeBroadcastID();
             return stub_factory.get_broadcast(devs, src_ips, source_id, broadcast_id);
-        }
-
-        /* Get a stub for a peculiar whole-node unicast request. It is only used
-         * by the module itself (hence private) to reach a node before an arc
-         * is ready or after it has been removed.
-         */
-        private IAddressManagerStub
-        get_stub_for_no_arc(
-            NeighborhoodNodeID its_id,
-            string its_mac,
-            string my_dev,
-            bool wait_reply=true)
-        {
-            IUnicastID unicast_id = new NoArcWholeNodeUnicastID(its_id, its_mac);
-            ISourceID source_id = new WholeNodeSourceID(my_id);
-            return stub_factory.get_unicast(my_dev, local_addresses[my_dev], source_id, unicast_id, wait_reply);
         }
 
         /* Remove an arc.
@@ -1000,23 +638,20 @@ namespace Netsukuku.Neighborhood
             if (! arcs.contains(_arc)) return;
             // signal removing arc
             if (_arc.available) arc_removing(arc, do_tell);
+            string my_dev = _arc.my_nic.dev;
+            string my_addr = local_addresses[my_dev];
             // remove the fixed address of the neighbor
-            ip_mgr.remove_neighbor(
-                        /*my_addr*/ local_addresses[_arc.my_nic.dev],
-                        /*my_dev*/ _arc.my_nic.dev,
-                        /*neighbor_addr*/ _arc.neighbour_nic_addr);
+            ip_mgr.remove_neighbor(my_addr, my_dev, _arc.neighbour_nic_addr);
             // remove the arc
             arcs.remove(_arc);
             // try and tell the neighbour to do the same
             if (do_tell)
             {
-                // use UDP, we just removed the local_address of the neighbor
-                var uc = get_stub_for_no_arc(_arc.neighbour_id, _arc.neighbour_mac, _arc.my_nic.dev, false);
+                // use broadcast, we just removed the local_address of the neighbor
+                IAddressManagerStub bc = get_stub_for_broadcast_to_dev(my_dev, my_addr);
                 try {
-                    uc.neighborhood_manager
-                        .remove_arc(my_id,
-                                   _arc.my_nic.mac,
-                                   local_addresses[_arc.my_nic.dev]);
+                    bc.neighborhood_manager.remove_arc(_arc.neighbour_id, _arc.neighbour_mac, _arc.neighbour_nic_addr,
+                                my_id, _arc.my_nic.mac, local_addresses[_arc.my_nic.dev]);
                 } catch (StubError e) {
                 } catch (DeserializeError e) {
                     warning(@"Call to remove_arc: got DeserializeError: $(e.message)");
@@ -1031,7 +666,7 @@ namespace Netsukuku.Neighborhood
         /* Remotable methods
          */
 
-        public void here_i_am(INeighborhoodNodeIDMessage _its_id, string mac, string nic_addr, CallerInfo? _rpc_caller=null)
+        public void here_i_am(INeighborhoodNodeIDMessage _its_id, string its_mac, string its_nic_addr, CallerInfo? _rpc_caller=null)
         {
             assert(_rpc_caller != null);
             // This call has to be made in UDP broadcast, else ignore it.
@@ -1042,8 +677,9 @@ namespace Netsukuku.Neighborhood
             NeighborhoodNodeID its_id = (NeighborhoodNodeID)_its_id;
             // This is called in broadcast. Maybe it's me. It should not be the case.
             if (its_id.id == my_id.id) return;
-            // It's a neighbour. The message came through my_nic. The MAC of the peer is mac.
+            // It's a neighbour. The message came through my_nic. The MAC of the peer is its_mac.
             string my_dev = rpc_caller.dev;
+            string my_addr = local_addresses[my_dev];
             INeighborhoodNetworkInterface? my_nic
                     = get_monitoring_interface_from_dev(my_dev);
             if (my_nic == null)
@@ -1052,87 +688,108 @@ namespace Netsukuku.Neighborhood
                 return;
             }
             // Did I already meet this node? Did I already make an arc?
+            NeighborhoodRealArc? prev_arc = null;
             foreach (NeighborhoodRealArc arc in arcs)
             {
                 if (arc.neighbour_id.id == its_id.id)
                 {
                     // I already met him. Same MAC and same NIC?
-                    if (arc.neighbour_mac == mac && arc.my_nic == my_nic)
+                    if (arc.neighbour_mac == its_mac && arc.my_nic == my_nic)
                     {
-                        // I already made this arc. Ignore this message.
-                        return;
+                        // I already made this arc.
+                        prev_arc = arc;
+                        // Is it exposed?
+                        if (arc.exposed)
+                        {
+                            // Ignore this message.
+                            return;
+                        }
+                        break;
                     }
-                    if (arc.neighbour_mac == mac || arc.my_nic == my_nic)
+                    if (arc.neighbour_mac == its_mac || arc.my_nic == my_nic)
                     {
                         // Not willing to make a new arc on same collision
                         // domain. Ignore this message.
                         return;
                     }
-                    // Not this same arc. Continue searching for a previous arc.
-                    continue;
                 }
             }
-            // Do I have too many arcs?
-            if (arcs.size >= max_arcs)
-            {
-                // Ignore message.
-                return;
-            }
-            // We can try and make a new arc.
-            // Since we haven't yet an arc with this node, we cannot use TCP.
-            // We use unicast UDP, if it fails not a big problem, we'll retry soon.
-            var uc = get_stub_for_no_arc(its_id, mac, my_dev);
-
-            bool refused = false;
             bool failed = false;
-            try
+            NeighborhoodRealArc? cur_arc = null;
+            if (prev_arc != null) cur_arc = prev_arc;
+            else
             {
-                uc.neighborhood_manager.request_arc(my_id, my_nic.mac, local_addresses[my_dev]);
+                // We can try and make a new arc.
+                // Since we haven't yet an arc with this node, we use broadcast again.
+                IAddressManagerStub bc = get_stub_for_broadcast_to_dev(my_dev, my_addr);
+                try {
+                    bc.neighborhood_manager.request_arc(its_id, its_mac, its_nic_addr, my_id, my_nic.mac, local_addresses[my_dev]);
+                } catch (StubError e) {
+                    // failed
+                    failed = true;
+                } catch (DeserializeError e) {
+                    warning(@"Call to request_arc: got DeserializeError: $(e.message)");
+                    // failed
+                    failed = true;
+                }
+                if (! failed)
+                {
+                    // Did I already make an arc? Check again to avoid race condition.
+                    foreach (NeighborhoodRealArc arc in arcs)
+                    {
+                        if (arc.neighbour_id.id == its_id.id)
+                        {
+                            // I already formed this arc.
+                            return;
+                        }
+                    }
+                    // Let's make an arc
+                    NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, its_mac, its_nic_addr, my_nic);
+                    arcs.add(new_arc);
+                    // add the fixed address of the neighbor
+                    ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
+                    cur_arc = new_arc;
+                }
+                else error("not yet implemented");
             }
-            catch (NeighborhoodRequestArcError e)
-            {
-                // arc refused
-                refused = true;
-            }
-            catch (StubError e)
-            {
+
+
+            // can I export?
+            bool can_i = monitoring_arcs.size < max_arcs;
+            // can_you_export?
+            IAddressManagerStub tc = get_stub_whole_node_unicast(cur_arc);
+            bool can_you = false;
+            try {
+                can_you = tc.neighborhood_manager.can_you_export(can_i);
+            } catch (StubError e) {
                 // failed
                 failed = true;
-            }
-            catch (DeserializeError e)
-            {
+            } catch (DeserializeError e) {
                 warning(@"Call to request_arc: got DeserializeError: $(e.message)");
                 // failed
                 failed = true;
             }
-            if (! (refused || failed))
+            if (failed)
             {
-                // Did I already make an arc? Check again to avoid race condition.
-                foreach (NeighborhoodRealArc arc in arcs)
-                {
-                    if (arc.neighbour_id.id == its_id.id)
-                    {
-                        // I already formed this arc.
-                        return;
-                    }
-                }
-                // Let's make an arc
-                NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, mac, nic_addr, my_nic);
-                arcs.add(new_arc);
-                // add the fixed address of the neighbor
-                ip_mgr.add_neighbor(
-                            /*my_addr*/ local_addresses[my_dev],
-                            /*my_dev*/ my_dev,
-                            /*neighbor_addr*/ nic_addr);
+                error("not yet implemented");
+            }
+            if (can_i && can_you)
+            {
+                cur_arc.exposed = true;
                 // start periodical ping
-                start_arc_monitor(new_arc);
+                start_arc_monitor(cur_arc);
             }
         }
 
-        public void request_arc(INeighborhoodNodeIDMessage _its_id, string mac, string nic_addr,
-                                CallerInfo? _rpc_caller=null) throws NeighborhoodRequestArcError
+//        public void request_arc(INeighborhoodNodeIDMessage _its_id, string mac, string nic_addr,
+//                                CallerInfo? _rpc_caller=null)
+        public void request_arc(INeighborhoodNodeIDMessage _my_id, string my_mac, string my_nic_addr,
+                                INeighborhoodNodeIDMessage _its_id, string its_mac, string its_nic_addr,
+                                CallerInfo? _rpc_caller=null)
         {
-            debug("request_arc: start");
+            // is message for me?
+            
+            error("not implemented yet");
             assert(_rpc_caller != null);
             // This call has to be made in UDP unicast, else ignore it.
             if (! (_rpc_caller is UnicastCallerInfo)) return;
@@ -1140,11 +797,11 @@ namespace Netsukuku.Neighborhood
             // This call should have a NeighborhoodNodeID, else ignore it.
             if (! (_its_id is NeighborhoodNodeID)) return;
             NeighborhoodNodeID its_id = (NeighborhoodNodeID)_its_id;
-            // The message comes from my_nic and its mac is mac.
-            // TODO check that nic_addr is in the same range used by the delegate new_linklocal_address.
-            // TODO check that nic_addr is not conflicting with mine or my neighbors' ones.
+            // The message comes from my_nic and its mac is its_mac.
+            // TODO check that its_nic_addr is in the same range used by the delegate new_linklocal_address.
+            // TODO check that its_nic_addr is not conflicting with mine or my neighbors' ones.
             string my_dev = rpc_caller.dev;
-            debug(@"request_arc: through $(my_dev)");
+            string my_addr = local_addresses[my_dev];
             INeighborhoodNetworkInterface? my_nic
                     = get_monitoring_interface_from_dev(my_dev);
             if (my_nic == null)
@@ -1158,46 +815,64 @@ namespace Netsukuku.Neighborhood
                 if (arc.neighbour_id.equals(its_id))
                 {
                     // I already met him. Same MAC and same NIC?
-                    if (arc.neighbour_mac == mac && arc.my_nic == my_nic)
+                    if (arc.neighbour_mac == its_mac && arc.my_nic == my_nic)
                     {
                         // I already made this arc. Confirm arc.
                         warning("Neighborhood.request_arc: " +
-                        @"Already got $(mac) on $(my_nic.mac)");
+                        @"Already got $(its_mac) on $(my_nic.mac)");
                         return;
                     }
-                    if (arc.neighbour_mac == mac || arc.my_nic == my_nic)
+                    if (arc.neighbour_mac == its_mac || arc.my_nic == my_nic)
                     {
                         // Not willing to make a new arc on same collision
                         // domain.
-                        throw new NeighborhoodRequestArcError.TWO_ARCS_ON_COLLISION_DOMAIN(
-                        @"Refusing $(mac) on $(my_nic.mac).");
+                        // throw new NeighborhoodRequestArcError.TWO_ARCS_ON_COLLISION_DOMAIN(@"Refusing $(mac) on $(my_nic.mac).");
+                        error("not implemented yet");
                     }
                     // Not this same arc. Continue searching for a previous arc.
                     continue;
                 }
             }
             // Do I have too many arcs?
-            if (arcs.size >= max_arcs)
+            if (monitoring_arcs.size >= max_arcs)
             {
                 // Refuse.
-                throw new NeighborhoodRequestArcError.TOO_MANY_ARCS(
-                @"Refusing $(mac) because too many arcs.");
+                // throw new NeighborhoodRequestArcError.TOO_MANY_ARCS(@"Refusing $(mac) because too many arcs.");
+                error("not implemented yet");
             }
             // Let's make an arc
-            NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, mac, nic_addr, my_nic);
+            NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, its_mac, its_nic_addr, my_nic);
             arcs.add(new_arc);
             // add the fixed address of the neighbor
-            ip_mgr.add_neighbor(
-                        /*my_addr*/ local_addresses[my_dev],
-                        /*my_dev*/ my_dev,
-                        /*neighbor_addr*/ nic_addr);
+            ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
             // start periodical ping
             start_arc_monitor(new_arc);
         }
 
-        public void remove_arc(INeighborhoodNodeIDMessage _its_id, string mac, string nic_addr,
+        public bool can_you_export(bool i_can_export, CallerInfo? caller = null)
+        {
+            error("not implemented yet");
+
+            // ...
+
+            // Do I have too many arcs?
+            if (monitoring_arcs.size >= max_arcs)
+            {
+                // Refuse.
+                // throw new NeighborhoodRequestArcError.TOO_MANY_ARCS(@"Refusing $(mac) because too many arcs.");
+                error("not implemented yet");
+            }
+        }
+
+//        public void remove_arc(INeighborhoodNodeIDMessage _its_id, string mac, string nic_addr,
+//                                CallerInfo? _rpc_caller=null)
+        public void remove_arc(INeighborhoodNodeIDMessage _my_id, string my_mac, string my_nic_addr,
+                                INeighborhoodNodeIDMessage _its_id, string its_mac, string its_nic_addr,
                                 CallerInfo? _rpc_caller=null)
         {
+            // is message for me?
+            
+            error("not implemented yet");
             assert(_rpc_caller != null);
             // This call has to be made in UDP unicast, else ignore it.
             if (! (_rpc_caller is UnicastCallerInfo)) return;
@@ -1219,7 +894,7 @@ namespace Netsukuku.Neighborhood
             foreach (NeighborhoodRealArc arc in arcs)
             {
                 if (arc.neighbour_id.equals(its_id) &&
-                    arc.neighbour_mac == mac &&
+                    arc.neighbour_mac == its_mac &&
                     arc.my_nic == my_nic)
                 {
                     remove_my_arc(arc, false);
