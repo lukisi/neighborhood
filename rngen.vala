@@ -1,6 +1,6 @@
 /*
  *  This file is part of Netsukuku.
- *  Copyright (C) 2017 Luca Dionisi aka lukisi <luca.dionisi@gmail.com>
+ *  Copyright (C) 2017-2018 Luca Dionisi aka lukisi <luca.dionisi@gmail.com>
  *
  *  Netsukuku is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -15,9 +15,6 @@
  *  You should have received a copy of the GNU General Public License
  *  along with Netsukuku.  If not, see <http://www.gnu.org/licenses/>.
  */
-
-using Gee;
-using TaskletSystem;
 
 namespace Netsukuku.Neighborhood
 {
