@@ -780,8 +780,6 @@ namespace Netsukuku.Neighborhood
             }
         }
 
-//        public void request_arc(INeighborhoodNodeIDMessage _its_id, string mac, string nic_addr,
-//                                CallerInfo? _rpc_caller=null)
         public void request_arc(INeighborhoodNodeIDMessage _my_id, string my_mac, string my_nic_addr,
                                 INeighborhoodNodeIDMessage _its_id, string its_mac, string its_nic_addr,
                                 CallerInfo? _rpc_caller=null)
@@ -863,8 +861,6 @@ namespace Netsukuku.Neighborhood
             }
         }
 
-//        public void remove_arc(INeighborhoodNodeIDMessage _its_id, string mac, string nic_addr,
-//                                CallerInfo? _rpc_caller=null)
         public void remove_arc(INeighborhoodNodeIDMessage _my_id, string my_mac, string my_nic_addr,
                                 INeighborhoodNodeIDMessage _its_id, string its_mac, string its_nic_addr,
                                 CallerInfo? _rpc_caller=null)
