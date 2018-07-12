@@ -65,6 +65,13 @@ namespace Netsukuku.Neighborhood
             local_addresses = new HashMap<string, string>();
             monitoring_devs = new HashMap<string, ITaskletHandle>();
             arcs = new ArrayList<NeighborhoodRealArc>();
+            arcs_by_itsmac = new HashMap<string, ArrayList<NeighborhoodRealArc>>();
+            arcs_by_itsll = new HashMap<string, ArrayList<NeighborhoodRealArc>>();
+            arcs_by_itsnodeid = new HashMap<string, ArrayList<NeighborhoodRealArc>>();
+            arcs_by_mydev_itsmac = new HashMap<string, HashMap<string, ArrayList<NeighborhoodRealArc>>>();
+            arcs_by_mydev_itsll = new HashMap<string, HashMap<string, ArrayList<NeighborhoodRealArc>>>();
+            arcs_by_mydev_itsnodeid = new HashMap<string, HashMap<string, ArrayList<NeighborhoodRealArc>>>();
+            exported_arcs = new ArrayList<NeighborhoodRealArc>();
             monitoring_arcs = new HashMap<NeighborhoodRealArc, ITaskletHandle>();
             this.new_linklocal_address = (owned)new_linklocal_address;
         }
@@ -80,6 +87,13 @@ namespace Netsukuku.Neighborhood
         private HashMap<string, string> local_addresses;
         private HashMap<string, ITaskletHandle> monitoring_devs;
         private ArrayList<NeighborhoodRealArc> arcs;
+        private HashMap<string, ArrayList<NeighborhoodRealArc>> arcs_by_itsmac;
+        private HashMap<string, ArrayList<NeighborhoodRealArc>> arcs_by_itsll;
+        private HashMap<string, ArrayList<NeighborhoodRealArc>> arcs_by_itsnodeid;
+        private HashMap<string, HashMap<string, ArrayList<NeighborhoodRealArc>>> arcs_by_mydev_itsmac;
+        private HashMap<string, HashMap<string, ArrayList<NeighborhoodRealArc>>> arcs_by_mydev_itsll;
+        private HashMap<string, HashMap<string, ArrayList<NeighborhoodRealArc>>> arcs_by_mydev_itsnodeid;
+        private ArrayList<NeighborhoodRealArc> exported_arcs;
         private HashMap<NeighborhoodRealArc, ITaskletHandle> monitoring_arcs;
         private NewLinklocalAddress new_linklocal_address;
 
@@ -122,6 +136,9 @@ namespace Netsukuku.Neighborhood
             monitoring_devs[dev] = t;
             nics[dev] = nic;
             local_addresses[dev] = local_address;
+            arcs_by_mydev_itsmac[dev] = new HashMap<string, ArrayList<NeighborhoodRealArc>>();
+            arcs_by_mydev_itsll[dev] = new HashMap<string, ArrayList<NeighborhoodRealArc>>();
+            arcs_by_mydev_itsnodeid[dev] = new HashMap<string, ArrayList<NeighborhoodRealArc>>();
         }
 
         public void stop_monitor(string dev)
@@ -215,8 +232,7 @@ namespace Netsukuku.Neighborhood
             public void * func()
             {
                 long last_rtt = -1;
-                // wait that the pair of nodes both create the NeighborhoodRealArc.
-                tasklet.ms_wait(400);
+                // arc should be exported, so the peer has the arc too.
                 while (true)
                 {
                     // Measure rtt
@@ -665,6 +681,14 @@ namespace Netsukuku.Neighborhood
         /* Remotable methods
          */
 
+        internal delegate bool FindArcInListProposition(NeighborhoodRealArc arc);
+        internal int find_arc_in_list(ArrayList<NeighborhoodRealArc> lst, FindArcInListProposition p) {
+            for (int i = 0; i < lst.size; i++) {
+                NeighborhoodRealArc arc = lst[i];
+                if (p(arc)) return i;
+            }
+            return -1;
+        }
         public void here_i_am(INeighborhoodNodeIDMessage _its_id, string its_mac, string its_nic_addr, CallerInfo? _rpc_caller=null)
         {
             assert(_rpc_caller != null);
@@ -686,95 +710,94 @@ namespace Netsukuku.Neighborhood
                 warning(@"Neighborhood.here_i_am: $(my_dev) is not being monitored");
                 return;
             }
-            // Did I already meet this node? Did I already make an arc?
-            NeighborhoodRealArc? prev_arc = null;
-            foreach (NeighborhoodRealArc arc in arcs)
-            {
-                if (arc.neighbour_id.id == its_id.id)
-                {
-                    // I already met him. Same MAC and same NIC?
-                    if (arc.neighbour_mac == its_mac && arc.my_nic == my_nic)
-                    {
-                        // I already made this arc.
-                        prev_arc = arc;
-                        // Is it exposed?
-                        if (arc.exposed)
-                        {
-                            // Ignore this message.
-                            return;
-                        }
-                        break;
-                    }
-                    if (arc.neighbour_mac == its_mac || arc.my_nic == my_nic)
-                    {
-                        // Not willing to make a new arc on same collision
-                        // domain. Ignore this message.
-                        return;
-                    }
-                }
-            }
-            bool failed = false;
+
+            string its_id_id = @"$(its_id.id)";
+            if (! arcs_by_itsmac.has_key(its_mac))
+                arcs_by_itsmac[its_mac] = new ArrayList<NeighborhoodRealArc>();
+            if (! arcs_by_itsll.has_key(its_nic_addr))
+                arcs_by_itsll[its_nic_addr] = new ArrayList<NeighborhoodRealArc>();
+            if (! arcs_by_itsnodeid.has_key(its_id_id))
+                arcs_by_itsnodeid[its_id_id] = new ArrayList<NeighborhoodRealArc>();
+            assert(arcs_by_mydev_itsmac.has_key(my_dev));
+            assert(arcs_by_mydev_itsll.has_key(my_dev));
+            assert(arcs_by_mydev_itsnodeid.has_key(my_dev));
+            if (! arcs_by_mydev_itsmac[my_dev].has_key(its_mac))
+                arcs_by_mydev_itsmac[my_dev][its_mac] = new ArrayList<NeighborhoodRealArc>();
+            if (! arcs_by_mydev_itsll[my_dev].has_key(its_nic_addr))
+                arcs_by_mydev_itsll[my_dev][its_nic_addr] = new ArrayList<NeighborhoodRealArc>();
+            if (! arcs_by_mydev_itsnodeid[my_dev].has_key(its_id_id))
+                arcs_by_mydev_itsnodeid[my_dev][its_id_id] = new ArrayList<NeighborhoodRealArc>();
+
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"a.neighbour_id" != its_id_id) != -1)
+                return; // ignore call. no different neighbors have same MAC.
+
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.neighbour_nic_addr != its_nic_addr) != -1)
+                return; // ignore call. each MAC has a fixed linklocal.
+
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev != my_dev && a.exported) != -1)
+                return; // ignore call. I already have an arc with another NIC of mines towards its_mac.
+
+            if (find_arc_in_list(arcs_by_itsnodeid[its_id_id], (a) => a.nic.dev == my_dev && a.neighbour_mac != its_mac && a.exported) != -1)
+                return; // ignore call. I already have an arc with my_dev towards another NIC of same neighbor.
+
             NeighborhoodRealArc? cur_arc = null;
-            if (prev_arc != null) cur_arc = prev_arc;
+            int i = find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev == my_dev);
+            if (i != -1)
+            {
+                cur_arc = arcs_by_itsmac[its_mac][i];
+                assert(@"cur_arc.neighbour_id" == its_id_id);
+                assert(cur_arc.neighbour_nic_addr != its_nic_addr);
+            }
             else
             {
-                // We can try and make a new arc.
-                // Since we haven't yet an arc with this node, we use broadcast again.
+                cur_arc = new NeighborhoodRealArc(its_id, its_mac, its_nic_addr, my_nic);
+                arcs_by_itsmac[its_mac].add(cur_arc);
+                arcs_by_itsll[its_nic_addr].add(cur_arc);
+                arcs_by_itsnodeid[its_id_id].add(cur_arc);
+                arcs_by_mydev_itsmac[my_dev][its_mac].add(cur_arc);
+                arcs_by_mydev_itsll[my_dev][its_nic_addr].add(cur_arc);
+                arcs_by_mydev_itsnodeid[my_dev][its_id_id].add(cur_arc);
                 IAddressManagerStub bc = get_stub_for_broadcast_to_dev(my_dev, my_addr);
                 try {
-                    bc.neighborhood_manager.request_arc(its_id, its_mac, its_nic_addr, my_id, my_nic.mac, local_addresses[my_dev]);
+                    bc.neighborhood_manager.request_arc(its_id, its_mac, its_nic_addr, my_id, my_nic.mac, my_addr);
                 } catch (StubError e) {
+                    warning(@"Call to request_arc: got StubError: $(e.message)");
                     // failed
-                    failed = true;
+                    return;
                 } catch (DeserializeError e) {
                     warning(@"Call to request_arc: got DeserializeError: $(e.message)");
                     // failed
-                    failed = true;
+                    return;
                 }
-                if (! failed)
-                {
-                    // Did I already make an arc? Check again to avoid race condition.
-                    foreach (NeighborhoodRealArc arc in arcs)
-                    {
-                        if (arc.neighbour_id.id == its_id.id)
-                        {
-                            // I already formed this arc.
-                            return;
-                        }
-                    }
-                    // Let's make an arc
-                    NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, its_mac, its_nic_addr, my_nic);
-                    arcs.add(new_arc);
-                    // add the fixed address of the neighbor
-                    ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
-                    cur_arc = new_arc;
-                }
-                else error("not yet implemented");
+                ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
+                // wait a bit for neighbor to do the same
+                tasklet.ms_wait(1000);
+                // during that wait, some tasklet may have worked on cur_arc.
             }
 
+            if (cur_arc.exported)
+                return; // ignore call.
 
             // can I export?
-            bool can_i = monitoring_arcs.size < max_arcs;
+            bool can_i = exported_arcs.size < max_arcs;
             // can_you_export?
             IAddressManagerStub tc = get_stub_whole_node_unicast(cur_arc);
             bool can_you = false;
             try {
                 can_you = tc.neighborhood_manager.can_you_export(can_i);
             } catch (StubError e) {
+                warning(@"Call to can_you_export: got StubError: $(e.message)");
                 // failed
-                failed = true;
+                return;
             } catch (DeserializeError e) {
-                warning(@"Call to request_arc: got DeserializeError: $(e.message)");
+                warning(@"Call to can_you_export: got DeserializeError: $(e.message)");
                 // failed
-                failed = true;
-            }
-            if (failed)
-            {
-                error("not yet implemented");
+                return;
             }
             if (can_i && can_you)
             {
-                cur_arc.exposed = true;
+                cur_arc.exported = true;
+                exported_arcs.add(cur_arc);
                 // start periodical ping
                 start_arc_monitor(cur_arc);
             }

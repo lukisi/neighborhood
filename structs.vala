@@ -32,7 +32,7 @@ namespace Netsukuku.Neighborhood
                 return _cost != null;
             }
         }
-        public bool exposed;
+        public bool exported;
 
         public NeighborhoodRealArc(NeighborhoodNodeID neighbour_id,
                        string mac,
@@ -44,7 +44,7 @@ namespace Netsukuku.Neighborhood
             _nic_addr = nic_addr;
             _my_nic = my_nic;
             _cost = null;
-            exposed = false;
+            exported = false;
         }
 
         public INeighborhoodNetworkInterface my_nic {
