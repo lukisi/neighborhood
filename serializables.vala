@@ -99,17 +99,6 @@ namespace Netsukuku.Neighborhood
         }
     }
 
-    internal class NoArcWholeNodeUnicastID : Object, IUnicastID
-    {
-        public NoArcWholeNodeUnicastID(NeighborhoodNodeID id, string mac)
-        {
-            this.id = id;
-            this.mac = mac;
-        }
-        public NeighborhoodNodeID id {get; set;}
-        public string mac {get; set;}
-    }
-
     internal class EveryWholeNodeBroadcastID : Object, IBroadcastID
     {
     }

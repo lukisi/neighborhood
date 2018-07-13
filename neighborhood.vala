@@ -32,7 +32,6 @@ namespace Netsukuku.Neighborhood
             typeof(WholeNodeSourceID).class_peek();
             typeof(WholeNodeUnicastID).class_peek();
             typeof(WholeNodeBroadcastID).class_peek();
-            typeof(NoArcWholeNodeUnicastID).class_peek();
             typeof(EveryWholeNodeBroadcastID).class_peek();
             typeof(IdentityAwareSourceID).class_peek();
             typeof(IdentityAwareUnicastID).class_peek();
@@ -340,16 +339,6 @@ namespace Netsukuku.Neighborhood
             string peer_address,
             string? dev)
         {
-            if (_unicast_id is NoArcWholeNodeUnicastID)
-            {
-                NoArcWholeNodeUnicastID unicast_id = (NoArcWholeNodeUnicastID)_unicast_id;
-                if (dev == null) return null;
-                if (! is_monitoring(dev)) return null;
-                INeighborhoodNetworkInterface my_nic = get_monitoring_interface_from_dev(dev);
-                if (! unicast_id.id.equals(my_id)) return null;
-                if (my_nic.mac != unicast_id.mac) return null;
-                return node_skeleton;
-            }
             if (_unicast_id is IdentityAwareUnicastID)
             {
                 IdentityAwareUnicastID unicast_id = (IdentityAwareUnicastID)_unicast_id;

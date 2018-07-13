@@ -198,21 +198,6 @@ class NeighborhoodTester : Object
         test_nn_2(wnb0.id_set[1]);
     }
 
-    public void test_NoArcWholeNodeUnicastID()
-    {
-        NoArcWholeNodeUnicastID na0;
-        {
-            Json.Node node;
-            {
-                NoArcWholeNodeUnicastID na = new NoArcWholeNodeUnicastID(make_nn_1(), "CAFE123456");
-                node = Json.gobject_serialize(na);
-            }
-            na0 = (NoArcWholeNodeUnicastID)Json.gobject_deserialize(typeof(NoArcWholeNodeUnicastID), node);
-        }
-        test_nn_1(na0.id);
-        assert(na0.mac == "CAFE123456");
-    }
-
     public void test_EveryWholeNodeBroadcastID()
     {
         EveryWholeNodeBroadcastID ewb0;
@@ -319,12 +304,6 @@ class NeighborhoodTester : Object
             var x = new NeighborhoodTester();
             x.set_up();
             x.test_WholeNodeBroadcastID();
-            x.tear_down();
-        });
-        GLib.Test.add_func ("/Serializables/NoArcWholeNodeUnicastID", () => {
-            var x = new NeighborhoodTester();
-            x.set_up();
-            x.test_NoArcWholeNodeUnicastID();
             x.tear_down();
         });
         GLib.Test.add_func ("/Serializables/EveryWholeNodeBroadcastID", () => {
