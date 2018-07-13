@@ -645,37 +645,49 @@ namespace Netsukuku.Neighborhood
 
         /* Remove an arc.
          */
-        public void remove_my_arc(INeighborhoodArc arc, bool do_tell=true)
+        public void remove_my_arc(INeighborhoodArc _arc, bool do_tell=true)
         {
-            if (!(arc is NeighborhoodRealArc)) return;
-            NeighborhoodRealArc _arc = (NeighborhoodRealArc)arc;
+            if (!(_arc is NeighborhoodRealArc)) return;
+            NeighborhoodRealArc arc = (NeighborhoodRealArc)_arc;
             // do just once
-            if (! arcs.contains(_arc)) return;
+            if (! arcs_by_itsmac[arc.neighbour_mac].contains(arc)) return;
             // signal removing arc
-            if (_arc.available) arc_removing(arc, do_tell);
-            string my_dev = _arc.my_nic.dev;
+            if (arc.exported)
+            {
+                if (arc.available) arc_removing(arc, do_tell);
+            }
+            string my_dev = arc.my_nic.dev;
             string my_addr = local_addresses[my_dev];
             // remove the fixed address of the neighbor
-            ip_mgr.remove_neighbor(my_addr, my_dev, _arc.neighbour_nic_addr);
+            ip_mgr.remove_neighbor(my_addr, my_dev, arc.neighbour_nic_addr);
             // remove the arc
-            arcs.remove(_arc);
+            arcs_by_itsmac[arc.neighbour_mac].remove(arc);
+            arcs_by_itsll[arc.neighbour_nic_addr].remove(arc);
+            arcs_by_itsnodeid[@"arc.neighbour_id.id"].remove(arc);
+            arcs_by_mydev_itsmac[my_dev][arc.neighbour_mac].remove(arc);
+            arcs_by_mydev_itsll[my_dev][arc.neighbour_nic_addr].remove(arc);
+            arcs_by_mydev_itsnodeid[my_dev][@"arc.neighbour_id.id"].remove(arc);
             // try and tell the neighbour to do the same
             if (do_tell)
             {
                 // use broadcast, we just removed the local_address of the neighbor
                 IAddressManagerStub bc = get_stub_for_broadcast_to_dev(my_dev, my_addr);
                 try {
-                    bc.neighborhood_manager.remove_arc(_arc.neighbour_id, _arc.neighbour_mac, _arc.neighbour_nic_addr,
-                                my_id, _arc.my_nic.mac, local_addresses[_arc.my_nic.dev]);
+                    bc.neighborhood_manager.remove_arc(arc.neighbour_id, arc.neighbour_mac, arc.neighbour_nic_addr,
+                                my_id, arc.my_nic.mac, local_addresses[arc.my_nic.dev]);
                 } catch (StubError e) {
                 } catch (DeserializeError e) {
                     warning(@"Call to remove_arc: got DeserializeError: $(e.message)");
                 }
             }
-            // signal removed arc
-            if (_arc.available) arc_removed(arc);
-            // stop monitoring the cost of the arc
-            stop_arc_monitor(_arc);
+            if (arc.exported)
+            {
+                // signal removed arc
+                if (arc.available) arc_removed(arc);
+                exported_arcs.remove(arc);
+                // stop monitoring the cost of the arc
+                stop_arc_monitor(arc);
+            }
         }
 
         /* Remotable methods
@@ -728,7 +740,7 @@ namespace Netsukuku.Neighborhood
             if (! arcs_by_mydev_itsnodeid[my_dev].has_key(its_id_id))
                 arcs_by_mydev_itsnodeid[my_dev][its_id_id] = new ArrayList<NeighborhoodRealArc>();
 
-            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"a.neighbour_id" != its_id_id) != -1)
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"a.neighbour_id.id" != its_id_id) != -1)
                 return; // ignore call. no different neighbors have same MAC.
 
             if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.neighbour_nic_addr != its_nic_addr) != -1)
@@ -745,7 +757,7 @@ namespace Netsukuku.Neighborhood
             if (i != -1)
             {
                 cur_arc = arcs_by_itsmac[its_mac][i];
-                assert(@"cur_arc.neighbour_id" == its_id_id);
+                assert(@"cur_arc.neighbour_id.id" == its_id_id);
                 assert(cur_arc.neighbour_nic_addr != its_nic_addr);
             }
             else
@@ -825,7 +837,7 @@ namespace Netsukuku.Neighborhood
                     = get_monitoring_interface_from_dev(my_dev);
             if (my_nic == null)
             {
-                warning(@"Neighborhood.here_i_am: $(my_dev) is not being monitored");
+                warning(@"Neighborhood.request_arc: $(my_dev) is not being monitored");
                 return;
             }
 
@@ -852,7 +864,7 @@ namespace Netsukuku.Neighborhood
             if (! arcs_by_mydev_itsnodeid[my_dev].has_key(its_id_id))
                 arcs_by_mydev_itsnodeid[my_dev][its_id_id] = new ArrayList<NeighborhoodRealArc>();
 
-            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"a.neighbour_id" != its_id_id) != -1)
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"a.neighbour_id.id" != its_id_id) != -1)
                 return; // ignore call. no different neighbors have same MAC.
 
             if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.neighbour_nic_addr != its_nic_addr) != -1)
@@ -913,41 +925,69 @@ namespace Netsukuku.Neighborhood
             return can_i;
         }
 
-        public void remove_arc(INeighborhoodNodeIDMessage _my_id, string my_mac, string my_nic_addr,
-                                INeighborhoodNodeIDMessage _its_id, string its_mac, string its_nic_addr,
-                                CallerInfo? _rpc_caller=null)
+        public void remove_arc(INeighborhoodNodeIDMessage _dest_id, string dest_mac, string dest_nic_addr,
+                               INeighborhoodNodeIDMessage _its_id, string its_mac, string its_nic_addr,
+                               CallerInfo? _rpc_caller=null)
         {
-            // is message for me?
-            
-            error("not implemented yet");
             assert(_rpc_caller != null);
-            // This call has to be made in UDP unicast, else ignore it.
-            if (! (_rpc_caller is UnicastCallerInfo)) return;
-            UnicastCallerInfo rpc_caller = (UnicastCallerInfo)_rpc_caller;
-            // This call should have a NeighborhoodNodeID, else ignore it.
+            // This call has to be made in UDP broadcast, else ignore it.
+            if (! (_rpc_caller is BroadcastCallerInfo)) return;
+            BroadcastCallerInfo rpc_caller = (BroadcastCallerInfo)_rpc_caller;
+            // This call should have a couple of NeighborhoodNodeID, else ignore it.
             if (! (_its_id is NeighborhoodNodeID)) return;
             NeighborhoodNodeID its_id = (NeighborhoodNodeID)_its_id;
-            // The message comes from my_nic.
+            if (! (_dest_id is NeighborhoodNodeID)) return;
+            NeighborhoodNodeID dest_id = (NeighborhoodNodeID)_dest_id;
+            // This is called in broadcast. Maybe it's me. It should not be the case.
+            if (its_id.id == my_id.id) return;
+            // It's a neighbour. The message came through my_nic. The MAC of the peer is its_mac.
             string my_dev = rpc_caller.dev;
+            string my_addr = local_addresses[my_dev];
             INeighborhoodNetworkInterface? my_nic
                     = get_monitoring_interface_from_dev(my_dev);
             if (my_nic == null)
             {
-                string msg = @"not found handled interface for dev $(my_dev)";
-                warning(@"Neighborhood.remove_arc: $(msg)");
+                warning(@"Neighborhood.remove_arc: $(my_dev) is not being monitored");
                 return;
             }
-            // Have I that arc?
-            foreach (NeighborhoodRealArc arc in arcs)
+
+            // is message for me?
+            if (dest_id.id != my_id.id) return;
+            if (dest_mac != my_nic.mac) return;
+            if (dest_nic_addr != my_addr) return;
+            // yes it is.
+
+            string its_id_id = @"$(its_id.id)";
+            if (! arcs_by_itsmac.has_key(its_mac))
+                arcs_by_itsmac[its_mac] = new ArrayList<NeighborhoodRealArc>();
+            if (! arcs_by_itsll.has_key(its_nic_addr))
+                arcs_by_itsll[its_nic_addr] = new ArrayList<NeighborhoodRealArc>();
+            if (! arcs_by_itsnodeid.has_key(its_id_id))
+                arcs_by_itsnodeid[its_id_id] = new ArrayList<NeighborhoodRealArc>();
+            assert(arcs_by_mydev_itsmac.has_key(my_dev));
+            assert(arcs_by_mydev_itsll.has_key(my_dev));
+            assert(arcs_by_mydev_itsnodeid.has_key(my_dev));
+            if (! arcs_by_mydev_itsmac[my_dev].has_key(its_mac))
+                arcs_by_mydev_itsmac[my_dev][its_mac] = new ArrayList<NeighborhoodRealArc>();
+            if (! arcs_by_mydev_itsll[my_dev].has_key(its_nic_addr))
+                arcs_by_mydev_itsll[my_dev][its_nic_addr] = new ArrayList<NeighborhoodRealArc>();
+            if (! arcs_by_mydev_itsnodeid[my_dev].has_key(its_id_id))
+                arcs_by_mydev_itsnodeid[my_dev][its_id_id] = new ArrayList<NeighborhoodRealArc>();
+
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"a.neighbour_id.id" != its_id_id) != -1)
+                return; // ignore call. no different neighbors have same MAC.
+
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.neighbour_nic_addr != its_nic_addr) != -1)
+                return; // ignore call. each MAC has a fixed linklocal.
+
+            NeighborhoodRealArc? arc = null;
+            int i = find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev == my_dev);
+            if (i != -1)
             {
-                if (arc.neighbour_id.equals(its_id) &&
-                    arc.neighbour_mac == its_mac &&
-                    arc.my_nic == my_nic)
-                {
-                    remove_my_arc(arc, false);
-                    // the foreach would abort if I don't break
-                    break;
-                }
+                arc = arcs_by_itsmac[its_mac][i];
+                assert(@"arc.neighbour_id.id" == its_id_id);
+                assert(arc.neighbour_nic_addr != its_nic_addr);
+                remove_my_arc(arc, false);
             }
         }
 
