@@ -681,11 +681,11 @@ namespace Netsukuku.Neighborhood
         /* Remotable methods
          */
 
-        internal delegate bool FindArcInListProposition(NeighborhoodRealArc arc);
-        internal int find_arc_in_list(ArrayList<NeighborhoodRealArc> lst, FindArcInListProposition p) {
+        internal delegate bool TestArc(NeighborhoodRealArc arc);
+        internal int find_arc_in_list(ArrayList<NeighborhoodRealArc> lst, TestArc proposition) {
             for (int i = 0; i < lst.size; i++) {
                 NeighborhoodRealArc arc = lst[i];
-                if (p(arc)) return i;
+                if (proposition(arc)) return i;
             }
             return -1;
         }
@@ -803,85 +803,114 @@ namespace Netsukuku.Neighborhood
             }
         }
 
-        public void request_arc(INeighborhoodNodeIDMessage _my_id, string my_mac, string my_nic_addr,
+        public void request_arc(INeighborhoodNodeIDMessage _dest_id, string dest_mac, string dest_nic_addr,
                                 INeighborhoodNodeIDMessage _its_id, string its_mac, string its_nic_addr,
                                 CallerInfo? _rpc_caller=null)
         {
-            // is message for me?
-            
-            error("not implemented yet");
             assert(_rpc_caller != null);
-            // This call has to be made in UDP unicast, else ignore it.
-            if (! (_rpc_caller is UnicastCallerInfo)) return;
-            UnicastCallerInfo rpc_caller = (UnicastCallerInfo)_rpc_caller;
-            // This call should have a NeighborhoodNodeID, else ignore it.
+            // This call has to be made in UDP broadcast, else ignore it.
+            if (! (_rpc_caller is BroadcastCallerInfo)) return;
+            BroadcastCallerInfo rpc_caller = (BroadcastCallerInfo)_rpc_caller;
+            // This call should have a couple of NeighborhoodNodeID, else ignore it.
             if (! (_its_id is NeighborhoodNodeID)) return;
             NeighborhoodNodeID its_id = (NeighborhoodNodeID)_its_id;
-            // The message comes from my_nic and its mac is its_mac.
-            // TODO check that its_nic_addr is in the same range used by the delegate new_linklocal_address.
-            // TODO check that its_nic_addr is not conflicting with mine or my neighbors' ones.
+            if (! (_dest_id is NeighborhoodNodeID)) return;
+            NeighborhoodNodeID dest_id = (NeighborhoodNodeID)_dest_id;
+            // This is called in broadcast. Maybe it's me. It should not be the case.
+            if (its_id.id == my_id.id) return;
+            // It's a neighbour. The message came through my_nic. The MAC of the peer is its_mac.
             string my_dev = rpc_caller.dev;
             string my_addr = local_addresses[my_dev];
             INeighborhoodNetworkInterface? my_nic
                     = get_monitoring_interface_from_dev(my_dev);
             if (my_nic == null)
             {
-                warning(@"Neighborhood.request_arc: $(my_dev) is not being monitored");
+                warning(@"Neighborhood.here_i_am: $(my_dev) is not being monitored");
                 return;
             }
-            // Did I already make an arc?
-            foreach (NeighborhoodRealArc arc in arcs)
-            {
-                if (arc.neighbour_id.equals(its_id))
-                {
-                    // I already met him. Same MAC and same NIC?
-                    if (arc.neighbour_mac == its_mac && arc.my_nic == my_nic)
-                    {
-                        // I already made this arc. Confirm arc.
-                        warning("Neighborhood.request_arc: " +
-                        @"Already got $(its_mac) on $(my_nic.mac)");
-                        return;
-                    }
-                    if (arc.neighbour_mac == its_mac || arc.my_nic == my_nic)
-                    {
-                        // Not willing to make a new arc on same collision
-                        // domain.
-                        // throw new NeighborhoodRequestArcError.TWO_ARCS_ON_COLLISION_DOMAIN(@"Refusing $(mac) on $(my_nic.mac).");
-                        error("not implemented yet");
-                    }
-                    // Not this same arc. Continue searching for a previous arc.
-                    continue;
-                }
-            }
-            // Do I have too many arcs?
-            if (monitoring_arcs.size >= max_arcs)
-            {
-                // Refuse.
-                // throw new NeighborhoodRequestArcError.TOO_MANY_ARCS(@"Refusing $(mac) because too many arcs.");
-                error("not implemented yet");
-            }
+
+            // is message for me?
+            if (dest_id.id != my_id.id) return;
+            if (dest_mac != my_nic.mac) return;
+            if (dest_nic_addr != my_addr) return;
+            // yes it is.
+
+            string its_id_id = @"$(its_id.id)";
+            if (! arcs_by_itsmac.has_key(its_mac))
+                arcs_by_itsmac[its_mac] = new ArrayList<NeighborhoodRealArc>();
+            if (! arcs_by_itsll.has_key(its_nic_addr))
+                arcs_by_itsll[its_nic_addr] = new ArrayList<NeighborhoodRealArc>();
+            if (! arcs_by_itsnodeid.has_key(its_id_id))
+                arcs_by_itsnodeid[its_id_id] = new ArrayList<NeighborhoodRealArc>();
+            assert(arcs_by_mydev_itsmac.has_key(my_dev));
+            assert(arcs_by_mydev_itsll.has_key(my_dev));
+            assert(arcs_by_mydev_itsnodeid.has_key(my_dev));
+            if (! arcs_by_mydev_itsmac[my_dev].has_key(its_mac))
+                arcs_by_mydev_itsmac[my_dev][its_mac] = new ArrayList<NeighborhoodRealArc>();
+            if (! arcs_by_mydev_itsll[my_dev].has_key(its_nic_addr))
+                arcs_by_mydev_itsll[my_dev][its_nic_addr] = new ArrayList<NeighborhoodRealArc>();
+            if (! arcs_by_mydev_itsnodeid[my_dev].has_key(its_id_id))
+                arcs_by_mydev_itsnodeid[my_dev][its_id_id] = new ArrayList<NeighborhoodRealArc>();
+
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"a.neighbour_id" != its_id_id) != -1)
+                return; // ignore call. no different neighbors have same MAC.
+
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.neighbour_nic_addr != its_nic_addr) != -1)
+                return; // ignore call. each MAC has a fixed linklocal.
+
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev != my_dev && a.exported) != -1)
+                return; // ignore call. I already have an arc with another NIC of mines towards its_mac.
+
+            if (find_arc_in_list(arcs_by_itsnodeid[its_id_id], (a) => a.nic.dev == my_dev && a.neighbour_mac != its_mac && a.exported) != -1)
+                return; // ignore call. I already have an arc with my_dev towards another NIC of same neighbor.
+
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev == my_dev) != -1)
+                return; // ignore call. I already have the arc that this message would add.
+
             // Let's make an arc
             NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, its_mac, its_nic_addr, my_nic);
-            arcs.add(new_arc);
-            // add the fixed address of the neighbor
+            arcs_by_itsmac[its_mac].add(new_arc);
+            arcs_by_itsll[its_nic_addr].add(new_arc);
+            arcs_by_itsnodeid[its_id_id].add(new_arc);
+            arcs_by_mydev_itsmac[my_dev][its_mac].add(new_arc);
+            arcs_by_mydev_itsll[my_dev][its_nic_addr].add(new_arc);
+            arcs_by_mydev_itsnodeid[my_dev][its_id_id].add(new_arc);
             ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
-            // start periodical ping
-            start_arc_monitor(new_arc);
         }
 
-        public bool can_you_export(bool i_can_export, CallerInfo? caller = null)
+        public bool can_you_export(bool peer_can_export, CallerInfo? _rpc_caller=null)
         {
-            error("not implemented yet");
+            assert(_rpc_caller != null);
+            // This call has to be made in TCP from a direct neighbor, else ignore it.
+            if (! (_rpc_caller is TcpclientCallerInfo)) tasklet.exit_tasklet(null);
+            TcpclientCallerInfo rpc_caller = (TcpclientCallerInfo)_rpc_caller;
+            string its_nic_addr = rpc_caller.peer_address;
+            string my_nic_addr = rpc_caller.my_address;
 
-            // ...
-
-            // Do I have too many arcs?
-            if (monitoring_arcs.size >= max_arcs)
+            string my_dev = null;
+            foreach (string dev in local_addresses.keys) if (local_addresses[dev] == my_nic_addr) my_dev = dev;
+            if (my_dev == null)
             {
-                // Refuse.
-                // throw new NeighborhoodRequestArcError.TOO_MANY_ARCS(@"Refusing $(mac) because too many arcs.");
-                error("not implemented yet");
+                warning(@"Neighborhood.can_you_export: $(my_nic_addr) is not of a monitored dev");
+                tasklet.exit_tasklet(null);
             }
+
+            if (! arcs_by_mydev_itsll[my_dev].has_key(its_nic_addr)) tasklet.exit_tasklet(null);
+            if (! arcs_by_mydev_itsll[my_dev][its_nic_addr].is_empty) tasklet.exit_tasklet(null);
+            assert(arcs_by_mydev_itsll[my_dev][its_nic_addr].size == 1);
+            NeighborhoodRealArc arc = arcs_by_mydev_itsll[my_dev][its_nic_addr][0];
+
+            if (arc.exported) return true;
+
+            bool can_i = exported_arcs.size < max_arcs;
+            if (can_i && peer_can_export)
+            {
+                arc.exported = true;
+                exported_arcs.add(arc);
+                // start periodical ping
+                start_arc_monitor(arc);
+            }
+            return can_i;
         }
 
         public void remove_arc(INeighborhoodNodeIDMessage _my_id, string my_mac, string my_nic_addr,
