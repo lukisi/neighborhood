@@ -47,58 +47,6 @@ namespace Netsukuku.Neighborhood
     {
     }
 
-    internal class WholeNodeBroadcastID : Object, Json.Serializable, IBroadcastID
-    {
-        public WholeNodeBroadcastID(Gee.List<NeighborhoodNodeID> id_set)
-        {
-            this.id_set = new ArrayList<NeighborhoodNodeID>((a, b) => a.equals(b));
-            this.id_set.add_all(id_set);
-        }
-        public Gee.List<NeighborhoodNodeID> id_set {get; set;}
-
-        public bool deserialize_property
-        (string property_name,
-         out GLib.Value @value,
-         GLib.ParamSpec pspec,
-         Json.Node property_node)
-        {
-            @value = 0;
-            switch (property_name) {
-            case "id_set":
-            case "id-set":
-                try {
-                    @value = deserialize_list_neighborhood_node_id(property_node);
-                } catch (HelperDeserializeError e) {
-                    return false;
-                }
-                break;
-            default:
-                return false;
-            }
-            return true;
-        }
-
-        public unowned GLib.ParamSpec? find_property
-        (string name)
-        {
-            return get_class().find_property(name);
-        }
-
-        public Json.Node serialize_property
-        (string property_name,
-         GLib.Value @value,
-         GLib.ParamSpec pspec)
-        {
-            switch (property_name) {
-            case "id_set":
-            case "id-set":
-                return serialize_list_neighborhood_node_id((Gee.List<NeighborhoodNodeID>)@value);
-            default:
-                error(@"wrong param $(property_name)");
-            }
-        }
-    }
-
     internal class EveryWholeNodeBroadcastID : Object, IBroadcastID
     {
     }
@@ -255,22 +203,6 @@ namespace Netsukuku.Neighborhood
         }
         b.end_array();
         return b.get_root();
-    }
-
-    internal Gee.List<NeighborhoodNodeID> deserialize_list_neighborhood_node_id(Json.Node property_node)
-    throws HelperDeserializeError
-    {
-        ListDeserializer<NeighborhoodNodeID> c = new ListDeserializer<NeighborhoodNodeID>();
-        var first_ret = c.deserialize_list_object(property_node);
-        // N.B. list of NeighborhoodNodeID must be searchable for the Neighborhood module to work.
-        var ret = new ArrayList<NeighborhoodNodeID>((a, b) => a.equals(b));
-        ret.add_all(first_ret);
-        return ret;
-    }
-
-    internal Json.Node serialize_list_neighborhood_node_id(Gee.List<NeighborhoodNodeID> lst)
-    {
-        return serialize_list_object(lst);
     }
 
     internal Gee.List<NodeID> deserialize_list_node_id(Json.Node property_node)

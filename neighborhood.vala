@@ -31,7 +31,6 @@ namespace Netsukuku.Neighborhood
             typeof(NodeID).class_peek();
             typeof(WholeNodeSourceID).class_peek();
             typeof(WholeNodeUnicastID).class_peek();
-            typeof(WholeNodeBroadcastID).class_peek();
             typeof(EveryWholeNodeBroadcastID).class_peek();
             typeof(IdentityAwareSourceID).class_peek();
             typeof(IdentityAwareUnicastID).class_peek();
@@ -404,21 +403,6 @@ namespace Netsukuku.Neighborhood
                     peer_address,
                     dev);
             }
-            if (_broadcast_id is WholeNodeBroadcastID)
-            {
-                WholeNodeBroadcastID broadcast_id = (WholeNodeBroadcastID)_broadcast_id;
-                if (! (_source_id is WholeNodeSourceID)) return new ArrayList<IAddressManagerSkeleton>();
-                WholeNodeSourceID source_id = (WholeNodeSourceID)_source_id;
-                Gee.List<NeighborhoodNodeID> whole_node_broadcast_set = broadcast_id.id_set;
-                NeighborhoodNodeID whole_node_source_id = source_id.id;
-                if (my_id in whole_node_broadcast_set && i.neighbour_id.equals(whole_node_source_id))
-                {
-                    Gee.List<IAddressManagerSkeleton> ret = new ArrayList<IAddressManagerSkeleton>();
-                    ret.add(node_skeleton);
-                    return ret;
-                }
-                return new ArrayList<IAddressManagerSkeleton>();
-            }
             return new ArrayList<IAddressManagerSkeleton>();
         }
 
@@ -493,38 +477,6 @@ namespace Netsukuku.Neighborhood
         {
             IdentityAwareSourceID source_id = new IdentityAwareSourceID(source_node_id);
             IdentityAwareBroadcastID broadcast_id = new IdentityAwareBroadcastID(broadcast_node_id_set);
-            ArrayList<string> devs = new ArrayList<string>();
-            ArrayList<string> src_ips = new ArrayList<string>();
-            foreach (NeighborhoodRealArc arc in arcs) if (arc.available) if (! (arc.my_nic.dev in devs))
-            {
-                devs.add(arc.my_nic.dev);
-                src_ips.add(local_addresses[arc.my_nic.dev]);
-            }
-            IAckCommunicator? ack_com = null;
-            if (missing_handler != null)
-            {
-                Gee.List<INeighborhoodArc> lst_expected = current_arcs_for_broadcast(devs);
-                ack_com = new NeighborhoodAcknowledgementsCommunicator(devs, this, missing_handler, lst_expected);
-            }
-            return stub_factory.get_broadcast(devs, src_ips, source_id, broadcast_id, ack_com);
-        }
-
-        /* Get a stub for a whole-node broadcast request.
-         */
-        public IAddressManagerStub
-        get_stub_whole_node_broadcast(
-            Gee.List<INeighborhoodArc> arc_set,
-            INeighborhoodMissingArcHandler? missing_handler=null)
-        {
-            WholeNodeSourceID source_id = new WholeNodeSourceID(my_id);
-            ArrayList<NeighborhoodNodeID> id_set = new ArrayList<NeighborhoodNodeID>();
-            foreach (INeighborhoodArc _arc in arc_set)
-            {
-                assert(_arc is NeighborhoodRealArc);
-                NeighborhoodRealArc arc = (NeighborhoodRealArc)_arc;
-                id_set.add(arc.neighbour_id);
-            }
-            WholeNodeBroadcastID broadcast_id = new WholeNodeBroadcastID(id_set);
             ArrayList<string> devs = new ArrayList<string>();
             ArrayList<string> src_ips = new ArrayList<string>();
             foreach (NeighborhoodRealArc arc in arcs) if (arc.available) if (! (arc.my_nic.dev in devs))

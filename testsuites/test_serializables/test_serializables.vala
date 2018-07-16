@@ -143,17 +143,6 @@ class NeighborhoodTester : Object
         assert(nn1.id == nn_1_id);
     }
 
-    int nn_2_id = 0;
-    NeighborhoodNodeID make_nn_2() {
-        var ret = new NeighborhoodNodeID();
-        nn_2_id = ret.id;
-        return ret;
-    }
-
-    void test_nn_2(NeighborhoodNodeID nn2) {
-        assert(nn2.id == nn_2_id);
-    }
-
     public void test_WholeNodeSourceID()
     {
         WholeNodeSourceID wns0;
@@ -179,23 +168,6 @@ class NeighborhoodTester : Object
             }
             wnu0 = (WholeNodeUnicastID)Json.gobject_deserialize(typeof(WholeNodeUnicastID), node);
         }
-    }
-
-    public void test_WholeNodeBroadcastID()
-    {
-        WholeNodeBroadcastID wnb0;
-        {
-            Json.Node node;
-            {
-                WholeNodeBroadcastID wnb = new WholeNodeBroadcastID
-                    (new ArrayList<NeighborhoodNodeID>.wrap({make_nn_1(), make_nn_2()}));
-                node = Json.gobject_serialize(wnb);
-            }
-            wnb0 = (WholeNodeBroadcastID)Json.gobject_deserialize(typeof(WholeNodeBroadcastID), node);
-        }
-        assert(wnb0.id_set.size == 2);
-        test_nn_1(wnb0.id_set[0]);
-        test_nn_2(wnb0.id_set[1]);
     }
 
     public void test_EveryWholeNodeBroadcastID()
@@ -298,12 +270,6 @@ class NeighborhoodTester : Object
             var x = new NeighborhoodTester();
             x.set_up();
             x.test_WholeNodeUnicastID();
-            x.tear_down();
-        });
-        GLib.Test.add_func ("/Serializables/WholeNodeBroadcastID", () => {
-            var x = new NeighborhoodTester();
-            x.set_up();
-            x.test_WholeNodeBroadcastID();
             x.tear_down();
         });
         GLib.Test.add_func ("/Serializables/EveryWholeNodeBroadcastID", () => {
