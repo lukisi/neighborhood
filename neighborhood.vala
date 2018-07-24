@@ -29,12 +29,12 @@ namespace Netsukuku.Neighborhood
             // Register serializable types internal to the module.
             typeof(NeighborhoodNodeID).class_peek();
             typeof(NodeID).class_peek();
-            typeof(WholeNodeSourceID).class_peek();
-            typeof(WholeNodeUnicastID).class_peek();
-            typeof(EveryWholeNodeBroadcastID).class_peek();
-            typeof(IdentityAwareSourceID).class_peek();
-            typeof(IdentityAwareUnicastID).class_peek();
-            typeof(IdentityAwareBroadcastID).class_peek();
+            typeof(WholeNodeSourceID2).class_peek();
+            typeof(WholeNodeUnicastID2).class_peek();
+            typeof(EveryWholeNodeBroadcastID2).class_peek();
+            typeof(IdentityAwareSourceID2).class_peek();
+            typeof(IdentityAwareUnicastID2).class_peek();
+            typeof(IdentityAwareBroadcastID2).class_peek();
             tasklet = _tasklet;
         }
 
@@ -109,6 +109,11 @@ namespace Netsukuku.Neighborhood
         // Address removed from a NIC, no more handling.
         public signal void nic_address_unset(string dev, string address);
 
+        public NeighborhoodNodeID get_my_neighborhood_id()
+        {
+            return my_id;
+        }
+
         public void start_monitor(INeighborhoodNetworkInterface nic)
         {
             string dev = nic.dev;
@@ -147,7 +152,7 @@ namespace Netsukuku.Neighborhood
             INeighborhoodNetworkInterface nic = nics[dev];
             // remove arcs on this nic
             ArrayList<NeighborhoodRealArc> todel = new ArrayList<NeighborhoodRealArc>();
-            foreach (NeighborhoodRealArc arc in arcs) if (arc.my_nic == nic) todel.add(arc);
+            foreach (NeighborhoodRealArc arc in arcs) if (arc.nic == nic) todel.add(arc);
             foreach (NeighborhoodRealArc arc in todel)
             {
                 remove_my_arc(arc);
@@ -188,11 +193,9 @@ namespace Netsukuku.Neighborhood
                 {
                     try
                     {
-                        IAddressManagerStub bc =
-                            mgr.get_stub_for_broadcast_to_dev(nic.dev, local_address);
-                            // nothing to do for missing ACK from known neighbours
-                            // because this message would be not important for them anyway.
-                        bc.neighborhood_manager.here_i_am(mgr.my_id, nic.mac, local_address);
+                        INeighborhoodManagerStub bc =
+                            mgr.stub_factory.get_broadcast_for_radar(nic);
+                        bc.here_i_am(mgr.my_id, nic.mac, local_address);
                     } catch (StubError e) {
                         warning("Neighborhood.monitor_run: " +
                         @"StubError '$(e.message)' while sending in broadcast to $(nic.mac).");
@@ -238,11 +241,11 @@ namespace Netsukuku.Neighborhood
                     string err_msg = "";
                     try
                     {
-                        rtt = arc.my_nic.measure_rtt(
+                        rtt = arc.nic.measure_rtt(
                             arc.neighbour_nic_addr,
                             arc.neighbour_mac,
-                            arc.my_nic.dev,
-                            mgr.local_addresses[arc.my_nic.dev]);
+                            arc.nic.dev,
+                            mgr.local_addresses[arc.nic.dev]);
                     } catch (NeighborhoodGetRttError e) {
                         // Failed measure_rtt.
                         err_msg = e.message;
@@ -252,8 +255,8 @@ namespace Netsukuku.Neighborhood
                     bool nop_check = false;
                     try
                     {
-                        IAddressManagerStub tc = mgr.get_stub_whole_node_unicast(arc);
-                        tc.neighborhood_manager.nop();
+                        INeighborhoodManagerStub tc = mgr.stub_factory.get_tcp(arc);
+                        tc.nop();
                         nop_check = true;
                     } catch (StubError e) {
                     } catch (DeserializeError e) {
@@ -338,21 +341,21 @@ namespace Netsukuku.Neighborhood
             string peer_address,
             string? dev)
         {
-            if (_unicast_id is IdentityAwareUnicastID)
+            if (_unicast_id is IdentityAwareUnicastID2)
             {
-                IdentityAwareUnicastID unicast_id = (IdentityAwareUnicastID)_unicast_id;
+                IdentityAwareUnicastID2 unicast_id = (IdentityAwareUnicastID2)_unicast_id;
                 if (dev != null) return null;
-                if (! (_source_id is IdentityAwareSourceID)) return null;
-                IdentityAwareSourceID source_id = (IdentityAwareSourceID)_source_id;
+                if (! (_source_id is IdentityAwareSourceID2)) return null;
+                IdentityAwareSourceID2 source_id = (IdentityAwareSourceID2)_source_id;
                 NodeID identity_aware_unicast_id = unicast_id.id;
                 NodeID identity_aware_source_id = source_id.id;
                 return get_identity_skeleton(identity_aware_source_id, identity_aware_unicast_id, peer_address);
             }
-            if (_unicast_id is WholeNodeUnicastID)
+            if (_unicast_id is WholeNodeUnicastID2)
             {
                 if (dev != null) return null;
-                if (! (_source_id is WholeNodeSourceID)) return null;
-                WholeNodeSourceID source_id = (WholeNodeSourceID)_source_id;
+                if (! (_source_id is WholeNodeSourceID2)) return null;
+                WholeNodeSourceID2 source_id = (WholeNodeSourceID2)_source_id;
                 NeighborhoodNodeID whole_node_source_id = source_id.id;
                 foreach (NeighborhoodRealArc arc in arcs)
                 {
@@ -374,7 +377,7 @@ namespace Netsukuku.Neighborhood
             string peer_address,
             string dev)
         {
-            if (_broadcast_id is EveryWholeNodeBroadcastID)
+            if (_broadcast_id is EveryWholeNodeBroadcastID2)
             {
                 Gee.List<IAddressManagerSkeleton> ret = new ArrayList<IAddressManagerSkeleton>();
                 ret.add(node_skeleton);
@@ -383,18 +386,18 @@ namespace Netsukuku.Neighborhood
             NeighborhoodRealArc? i = null;
             foreach (NeighborhoodRealArc arc in arcs) if (arc.available)
             {
-                if (arc.neighbour_nic_addr == peer_address && arc.my_nic.dev == dev)
+                if (arc.neighbour_nic_addr == peer_address && arc.nic.dev == dev)
                 {
                     i = arc;
                     break;
                 }
             }
             if (i == null) return new ArrayList<IAddressManagerSkeleton>();
-            if (_broadcast_id is IdentityAwareBroadcastID)
+            if (_broadcast_id is IdentityAwareBroadcastID2)
             {
-                IdentityAwareBroadcastID broadcast_id = (IdentityAwareBroadcastID)_broadcast_id;
-                if (! (_source_id is IdentityAwareSourceID)) return new ArrayList<IAddressManagerSkeleton>();
-                IdentityAwareSourceID source_id = (IdentityAwareSourceID)_source_id;
+                IdentityAwareBroadcastID2 broadcast_id = (IdentityAwareBroadcastID2)_broadcast_id;
+                if (! (_source_id is IdentityAwareSourceID2)) return new ArrayList<IAddressManagerSkeleton>();
+                IdentityAwareSourceID2 source_id = (IdentityAwareSourceID2)_source_id;
                 Gee.List<NodeID> identity_aware_broadcast_set = broadcast_id.id_set;
                 NodeID identity_aware_source_id = source_id.id;
                 return get_identity_skeleton_set
@@ -412,8 +415,8 @@ namespace Netsukuku.Neighborhood
         get_identity(
             ISourceID _source_id)
         {
-            if (! (_source_id is IdentityAwareSourceID)) return null;
-            IdentityAwareSourceID source_id = (IdentityAwareSourceID)_source_id;
+            if (! (_source_id is IdentityAwareSourceID2)) return null;
+            IdentityAwareSourceID2 source_id = (IdentityAwareSourceID2)_source_id;
             return source_id.id;
         }
 
@@ -424,73 +427,19 @@ namespace Netsukuku.Neighborhood
             ISourceID _source_id,
             string dev)
         {
-            if (! (_source_id is WholeNodeSourceID)) return null;
-            WholeNodeSourceID source_id = (WholeNodeSourceID)_source_id;
+            if (! (_source_id is WholeNodeSourceID2)) return null;
+            WholeNodeSourceID2 source_id = (WholeNodeSourceID2)_source_id;
             NeighborhoodNodeID whole_node_source_id = source_id.id;
             NeighborhoodRealArc? i = null;
             foreach (NeighborhoodRealArc arc in arcs) if (arc.available)
             {
-                if (arc.neighbour_id.equals(whole_node_source_id) && arc.my_nic.dev == dev)
+                if (arc.neighbour_id.equals(whole_node_source_id) && arc.nic.dev == dev)
                 {
                     i = arc;
                     break;
                 }
             }
             return i;
-        }
-
-        /* Get a stub for a identity-aware unicast request.
-         */
-        public IAddressManagerStub
-        get_stub_identity_aware_unicast(
-            INeighborhoodArc arc,
-            NodeID source_node_id,
-            NodeID unicast_node_id,
-            bool wait_reply=true)
-        {
-            IdentityAwareSourceID source_id = new IdentityAwareSourceID(source_node_id);
-            IdentityAwareUnicastID unicast_id = new IdentityAwareUnicastID(unicast_node_id);
-            return stub_factory.get_tcp(arc.neighbour_nic_addr, source_id, unicast_id, wait_reply);
-        }
-
-        /* Get a stub for a whole-node unicast request.
-         */
-        public IAddressManagerStub
-        get_stub_whole_node_unicast(
-            INeighborhoodArc _arc,
-            bool wait_reply=true)
-        {
-            assert(_arc is NeighborhoodRealArc);
-            NeighborhoodRealArc arc = (NeighborhoodRealArc)_arc;
-            WholeNodeSourceID source_id = new WholeNodeSourceID(my_id);
-            WholeNodeUnicastID unicast_id = new WholeNodeUnicastID();
-            return stub_factory.get_tcp(arc.neighbour_nic_addr, source_id, unicast_id, wait_reply);
-        }
-
-        /* Get a stub for a identity-aware broadcast request.
-         */
-        public IAddressManagerStub
-        get_stub_identity_aware_broadcast(
-            NodeID source_node_id,
-            Gee.List<NodeID> broadcast_node_id_set,
-            INeighborhoodMissingArcHandler? missing_handler=null)
-        {
-            IdentityAwareSourceID source_id = new IdentityAwareSourceID(source_node_id);
-            IdentityAwareBroadcastID broadcast_id = new IdentityAwareBroadcastID(broadcast_node_id_set);
-            ArrayList<string> devs = new ArrayList<string>();
-            ArrayList<string> src_ips = new ArrayList<string>();
-            foreach (NeighborhoodRealArc arc in arcs) if (arc.available) if (! (arc.my_nic.dev in devs))
-            {
-                devs.add(arc.my_nic.dev);
-                src_ips.add(local_addresses[arc.my_nic.dev]);
-            }
-            IAckCommunicator? ack_com = null;
-            if (missing_handler != null)
-            {
-                Gee.List<INeighborhoodArc> lst_expected = current_arcs_for_broadcast(devs);
-                ack_com = new NeighborhoodAcknowledgementsCommunicator(devs, this, missing_handler, lst_expected);
-            }
-            return stub_factory.get_broadcast(devs, src_ips, source_id, broadcast_id, ack_com);
         }
 
         /* Internal method: current arcs for a given broadcast message
@@ -570,20 +519,6 @@ namespace Netsukuku.Neighborhood
             }
         }
 
-        /* Get a stub for a peculiar whole-node broadcast request. It is only used
-         * by the module itself (hence private) to reach all nodes in a NIC.
-         */
-        private IAddressManagerStub
-        get_stub_for_broadcast_to_dev(
-            string dev, string local_address)
-        {
-            ArrayList<string> devs = new ArrayList<string>.wrap({dev});
-            ArrayList<string> src_ips = new ArrayList<string>.wrap({local_address});
-            WholeNodeSourceID source_id = new WholeNodeSourceID(my_id);
-            EveryWholeNodeBroadcastID broadcast_id = new EveryWholeNodeBroadcastID();
-            return stub_factory.get_broadcast(devs, src_ips, source_id, broadcast_id);
-        }
-
         /* Remove an arc.
          */
         public void remove_my_arc(INeighborhoodArc _arc, bool do_tell=true)
@@ -597,7 +532,7 @@ namespace Netsukuku.Neighborhood
             {
                 if (arc.available) arc_removing(arc, do_tell);
             }
-            string my_dev = arc.my_nic.dev;
+            string my_dev = arc.nic.dev;
             string my_addr = local_addresses[my_dev];
             // remove the fixed address of the neighbor
             ip_mgr.remove_neighbor(my_addr, my_dev, arc.neighbour_nic_addr);
@@ -612,10 +547,10 @@ namespace Netsukuku.Neighborhood
             if (do_tell)
             {
                 // use broadcast, we just removed the local_address of the neighbor
-                IAddressManagerStub bc = get_stub_for_broadcast_to_dev(my_dev, my_addr);
+                INeighborhoodManagerStub bc = stub_factory.get_broadcast_for_radar(arc.nic);
                 try {
-                    bc.neighborhood_manager.remove_arc(arc.neighbour_id, arc.neighbour_mac, arc.neighbour_nic_addr,
-                                my_id, arc.my_nic.mac, local_addresses[arc.my_nic.dev]);
+                    bc.remove_arc(arc.neighbour_id, arc.neighbour_mac, arc.neighbour_nic_addr,
+                                my_id, arc.nic.mac, local_addresses[arc.nic.dev]);
                 } catch (StubError e) {
                 } catch (DeserializeError e) {
                     warning(@"Call to remove_arc: got DeserializeError: $(e.message)");
@@ -710,9 +645,9 @@ namespace Netsukuku.Neighborhood
                 arcs_by_mydev_itsmac[my_dev][its_mac].add(cur_arc);
                 arcs_by_mydev_itsll[my_dev][its_nic_addr].add(cur_arc);
                 arcs_by_mydev_itsnodeid[my_dev][its_id_id].add(cur_arc);
-                IAddressManagerStub bc = get_stub_for_broadcast_to_dev(my_dev, my_addr);
+                INeighborhoodManagerStub bc = stub_factory.get_broadcast_for_radar(my_nic);
                 try {
-                    bc.neighborhood_manager.request_arc(its_id, its_mac, its_nic_addr, my_id, my_nic.mac, my_addr);
+                    bc.request_arc(its_id, its_mac, its_nic_addr, my_id, my_nic.mac, my_addr);
                 } catch (StubError e) {
                     warning(@"Call to request_arc: got StubError: $(e.message)");
                     // failed
@@ -734,10 +669,10 @@ namespace Netsukuku.Neighborhood
             // can I export?
             bool can_i = exported_arcs.size < max_arcs;
             // can_you_export?
-            IAddressManagerStub tc = get_stub_whole_node_unicast(cur_arc);
+            INeighborhoodManagerStub tc = stub_factory.get_tcp(cur_arc);
             bool can_you = false;
             try {
-                can_you = tc.neighborhood_manager.can_you_export(can_i);
+                can_you = tc.can_you_export(can_i);
             } catch (StubError e) {
                 warning(@"Call to can_you_export: got StubError: $(e.message)");
                 // failed

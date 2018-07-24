@@ -47,18 +47,6 @@ namespace Netsukuku.Neighborhood
             exported = false;
         }
 
-        public INeighborhoodNetworkInterface my_nic {
-            get {
-                return _my_nic;
-            }
-        }
-
-        public NeighborhoodNodeID neighbour_id {
-            get {
-                return _neighbour_id;
-            }
-        }
-
         public void set_cost(long cost)
         {
             _cost = cost;
@@ -76,6 +64,12 @@ namespace Netsukuku.Neighborhood
         public string neighbour_nic_addr {
             get {
                 return _nic_addr;
+            }
+        }
+
+        public NeighborhoodNodeID neighbour_id {
+            get {
+                return _neighbour_id;
             }
         }
 

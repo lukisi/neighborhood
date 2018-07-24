@@ -20,7 +20,7 @@ using Gee;
 
 namespace Netsukuku.Neighborhood
 {
-    internal class NeighborhoodNodeID : Object, INeighborhoodNodeIDMessage
+    public class NeighborhoodNodeID : Object, INeighborhoodNodeIDMessage
     {
         public NeighborhoodNodeID()
         {
@@ -34,44 +34,44 @@ namespace Netsukuku.Neighborhood
         }
     }
 
-    internal class WholeNodeSourceID : Object, ISourceID
+    internal class WholeNodeSourceID2 : Object, ISourceID
     {
-        public WholeNodeSourceID(NeighborhoodNodeID id)
+        public WholeNodeSourceID2(NeighborhoodNodeID id)
         {
             this.id = id;
         }
         public NeighborhoodNodeID id {get; set;}
     }
 
-    internal class WholeNodeUnicastID : Object, IUnicastID
+    internal class WholeNodeUnicastID2 : Object, IUnicastID
     {
     }
 
-    internal class EveryWholeNodeBroadcastID : Object, IBroadcastID
+    internal class EveryWholeNodeBroadcastID2 : Object, IBroadcastID
     {
     }
 
-    internal class IdentityAwareSourceID : Object, ISourceID
+    internal class IdentityAwareSourceID2 : Object, ISourceID
     {
-        public IdentityAwareSourceID(NodeID id)
+        public IdentityAwareSourceID2(NodeID id)
         {
             this.id = id;
         }
         public NodeID id {get; set;}
     }
 
-    internal class IdentityAwareUnicastID : Object, IUnicastID
+    internal class IdentityAwareUnicastID2 : Object, IUnicastID
     {
-        public IdentityAwareUnicastID(NodeID id)
+        public IdentityAwareUnicastID2(NodeID id)
         {
             this.id = id;
         }
         public NodeID id {get; set;}
     }
 
-    internal class IdentityAwareBroadcastID : Object, Json.Serializable, IBroadcastID
+    internal class IdentityAwareBroadcastID2 : Object, Json.Serializable, IBroadcastID
     {
-        public IdentityAwareBroadcastID(Gee.List<NodeID> id_set)
+        public IdentityAwareBroadcastID2(Gee.List<NodeID> id_set)
         {
             this.id_set = new ArrayList<NodeID>((a, b) => a.equals(b));
             this.id_set.add_all(id_set);

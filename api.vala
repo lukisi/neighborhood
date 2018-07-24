@@ -33,10 +33,13 @@ namespace Netsukuku.Neighborhood
         public abstract long measure_rtt(string peer_addr, string peer_mac, string my_dev, string my_addr) throws NeighborhoodGetRttError;
     }
 
+    // NeighborhoodNodeID is in serializables.vala
+
     public interface INeighborhoodArc : Object
     {
         public abstract string neighbour_mac {get;}
         public abstract string neighbour_nic_addr {get;}
+        public abstract NeighborhoodNodeID neighbour_id {get;}
         public abstract long cost {get;}
         public abstract INeighborhoodNetworkInterface nic {get;}
     }
@@ -51,34 +54,12 @@ namespace Netsukuku.Neighborhood
      */
     public interface INeighborhoodStubFactory : Object
     {
-        public abstract IAddressManagerStub
-                        get_broadcast(
-                            Gee.List<string> devs,
-                            Gee.List<string> src_ips,
-                            ISourceID source_id,
-                            IBroadcastID broadcast_id,
-                            IAckCommunicator? ack_com=null
-                        );
+        public abstract INeighborhoodManagerStub
+        get_broadcast_for_radar(INeighborhoodNetworkInterface nic);
 
-        public  IAddressManagerStub
-                get_broadcast_to_dev(
-                    string dev,
-                    string src_ip,
-                    ISourceID source_id,
-                    IBroadcastID broadcast_id,
-                    IAckCommunicator? ack_com=null
-                )
-        {
-            var _devs = new ArrayList<string>.wrap({dev});
-            var _src_ips = new ArrayList<string>.wrap({src_ip});
-            return get_broadcast(_devs, _src_ips, source_id, broadcast_id, ack_com);
-        }
-
-        public abstract IAddressManagerStub
+        public abstract INeighborhoodManagerStub
                         get_tcp(
-                            string dest,
-                            ISourceID source_id,
-                            IUnicastID unicast_id,
+                            INeighborhoodArc arc,
                             bool wait_reply=true
                         );
     }
