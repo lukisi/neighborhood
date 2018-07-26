@@ -29,12 +29,6 @@ namespace Netsukuku.Neighborhood
             // Register serializable types internal to the module.
             typeof(NeighborhoodNodeID).class_peek();
             typeof(NodeID).class_peek();
-            typeof(WholeNodeSourceID2).class_peek();
-            typeof(WholeNodeUnicastID2).class_peek();
-            typeof(EveryWholeNodeBroadcastID2).class_peek();
-            typeof(IdentityAwareSourceID2).class_peek();
-            typeof(IdentityAwareUnicastID2).class_peek();
-            typeof(IdentityAwareBroadcastID2).class_peek();
             tasklet = _tasklet;
         }
 
@@ -44,17 +38,11 @@ namespace Netsukuku.Neighborhood
         }
 
         public NeighborhoodManager(
-                                   GetIdentitySkeletonFunc get_identity_skeleton,
-                                   GetIdentitySkeletonSetFunc get_identity_skeleton_set,
-                                   IAddressManagerSkeleton node_skeleton,
                                    int max_arcs,
                                    INeighborhoodStubFactory stub_factory,
                                    INeighborhoodIPRouteManager ip_mgr,
                                    owned NewLinklocalAddress new_linklocal_address)
         {
-            this.get_identity_skeleton = get_identity_skeleton;
-            this.get_identity_skeleton_set = get_identity_skeleton_set;
-            this.node_skeleton = node_skeleton;
             this.my_id = new NeighborhoodNodeID();
             this.max_arcs = max_arcs;
             this.stub_factory = stub_factory;
@@ -74,9 +62,6 @@ namespace Netsukuku.Neighborhood
             this.new_linklocal_address = (owned)new_linklocal_address;
         }
 
-        private unowned GetIdentitySkeletonFunc get_identity_skeleton;
-        private unowned GetIdentitySkeletonSetFunc get_identity_skeleton_set;
-        private IAddressManagerSkeleton node_skeleton;
         private NeighborhoodNodeID my_id;
         private int max_arcs;
         private INeighborhoodStubFactory stub_factory;
@@ -167,6 +152,16 @@ namespace Netsukuku.Neighborhood
             monitoring_devs.unset(dev);
             nics.unset(dev);
             local_addresses.unset(dev);
+        }
+
+        public void stop_monitor_all()
+        {
+            var copy_devs = new ArrayList<string>();
+            copy_devs.add_all(monitoring_devs.keys);
+            foreach (string dev in copy_devs)
+            {
+                stop_monitor(dev);
+            }
         }
 
         private bool is_monitoring(string dev)
@@ -311,18 +306,6 @@ namespace Netsukuku.Neighborhood
             }
         }
 
-        /* Get name of NIC which has been assigned a certain address by this module.
-         * It is used by the module's user to identify the interface where a TCP
-         *  request has been received.
-         */
-        public string? get_dev_from_my_address(string my_address)
-        {
-            string? dev = null;
-            foreach (string d in local_addresses.keys)
-                if (local_addresses[d] == my_address) dev = d;
-            return dev;
-        }
-
         /* Expose current valid arcs
          */
         public Gee.List<INeighborhoodArc> current_arcs()
@@ -330,193 +313,6 @@ namespace Netsukuku.Neighborhood
             var ret = new ArrayList<INeighborhoodArc>();
             foreach (NeighborhoodRealArc arc in arcs) if (arc.available) ret.add(arc);
             return ret;
-        }
-
-        /* Get root-dispatcher if the message is to be processed.
-         */
-        public IAddressManagerSkeleton?
-        get_dispatcher(
-            ISourceID _source_id,
-            IUnicastID _unicast_id,
-            string peer_address,
-            string? dev)
-        {
-            if (_unicast_id is IdentityAwareUnicastID2)
-            {
-                IdentityAwareUnicastID2 unicast_id = (IdentityAwareUnicastID2)_unicast_id;
-                if (dev != null) return null;
-                if (! (_source_id is IdentityAwareSourceID2)) return null;
-                IdentityAwareSourceID2 source_id = (IdentityAwareSourceID2)_source_id;
-                NodeID identity_aware_unicast_id = unicast_id.id;
-                NodeID identity_aware_source_id = source_id.id;
-                return get_identity_skeleton(identity_aware_source_id, identity_aware_unicast_id, peer_address);
-            }
-            if (_unicast_id is WholeNodeUnicastID2)
-            {
-                if (dev != null) return null;
-                if (! (_source_id is WholeNodeSourceID2)) return null;
-                WholeNodeSourceID2 source_id = (WholeNodeSourceID2)_source_id;
-                NeighborhoodNodeID whole_node_source_id = source_id.id;
-                foreach (NeighborhoodRealArc arc in arcs)
-                {
-                    if (arc.neighbour_nic_addr == peer_address &&
-                            arc.neighbour_id.equals(whole_node_source_id)) return node_skeleton;
-                }
-                return null;
-            }
-            warning(@"Unknown IUnicastID class $(_unicast_id.get_type().name())");
-            return null;
-        }
-
-        /* Get root-dispatchers if the message is to be processed.
-         */
-        public Gee.List<IAddressManagerSkeleton>
-        get_dispatcher_set(
-            ISourceID _source_id,
-            IBroadcastID _broadcast_id,
-            string peer_address,
-            string dev)
-        {
-            if (_broadcast_id is EveryWholeNodeBroadcastID2)
-            {
-                Gee.List<IAddressManagerSkeleton> ret = new ArrayList<IAddressManagerSkeleton>();
-                ret.add(node_skeleton);
-                return ret;
-            }
-            NeighborhoodRealArc? i = null;
-            foreach (NeighborhoodRealArc arc in arcs) if (arc.available)
-            {
-                if (arc.neighbour_nic_addr == peer_address && arc.nic.dev == dev)
-                {
-                    i = arc;
-                    break;
-                }
-            }
-            if (i == null) return new ArrayList<IAddressManagerSkeleton>();
-            if (_broadcast_id is IdentityAwareBroadcastID2)
-            {
-                IdentityAwareBroadcastID2 broadcast_id = (IdentityAwareBroadcastID2)_broadcast_id;
-                if (! (_source_id is IdentityAwareSourceID2)) return new ArrayList<IAddressManagerSkeleton>();
-                IdentityAwareSourceID2 source_id = (IdentityAwareSourceID2)_source_id;
-                Gee.List<NodeID> identity_aware_broadcast_set = broadcast_id.id_set;
-                NodeID identity_aware_source_id = source_id.id;
-                return get_identity_skeleton_set
-                    (identity_aware_source_id,
-                    identity_aware_broadcast_set,
-                    peer_address,
-                    dev);
-            }
-            return new ArrayList<IAddressManagerSkeleton>();
-        }
-
-        /* Get NodeID for the source of a received message. For identity-aware requests.
-         */
-        public NodeID?
-        get_identity(
-            ISourceID _source_id)
-        {
-            if (! (_source_id is IdentityAwareSourceID2)) return null;
-            IdentityAwareSourceID2 source_id = (IdentityAwareSourceID2)_source_id;
-            return source_id.id;
-        }
-
-        /* Get the arc for the source of a received message. For whole-node requests.
-         */
-        public INeighborhoodArc?
-        get_node_arc(
-            ISourceID _source_id,
-            string dev)
-        {
-            if (! (_source_id is WholeNodeSourceID2)) return null;
-            WholeNodeSourceID2 source_id = (WholeNodeSourceID2)_source_id;
-            NeighborhoodNodeID whole_node_source_id = source_id.id;
-            NeighborhoodRealArc? i = null;
-            foreach (NeighborhoodRealArc arc in arcs) if (arc.available)
-            {
-                if (arc.neighbour_id.equals(whole_node_source_id) && arc.nic.dev == dev)
-                {
-                    i = arc;
-                    break;
-                }
-            }
-            return i;
-        }
-
-        /* Internal method: current arcs for a given broadcast message
-         */
-        private Gee.List<INeighborhoodArc> current_arcs_for_broadcast(
-                            Gee.Collection<string> devs)
-        {
-            var ret = new ArrayList<INeighborhoodArc>();
-            foreach (NeighborhoodRealArc arc in arcs) if (arc.available)
-            {
-                // test arc against devs.
-                if (! (arc.nic.dev in devs)) continue;
-                // This should receive
-                ret.add(arc);
-            }
-            return ret;
-        }
-
-        /* The instance of this class is created when the stub factory is invoked to
-         * obtain a stub for broadcast.
-         */
-        private class NeighborhoodAcknowledgementsCommunicator : Object, IAckCommunicator
-        {
-            public Gee.List<string> devs;
-            public NeighborhoodManager mgr;
-            public INeighborhoodMissingArcHandler missing_handler;
-            public Gee.List<INeighborhoodArc> lst_expected;
-
-            public NeighborhoodAcknowledgementsCommunicator(
-                                Gee.Collection<string> devs,
-                                NeighborhoodManager mgr,
-                                INeighborhoodMissingArcHandler missing_handler,
-                                Gee.List<INeighborhoodArc> lst_expected)
-            {
-                this.devs = new ArrayList<string>();
-                this.devs.add_all(devs);
-                this.mgr = mgr;
-                this.missing_handler = missing_handler;
-                this.lst_expected = new ArrayList<INeighborhoodArc>();
-                this.lst_expected.add_all(lst_expected);
-            }
-
-            public void process_macs_list(Gee.List<string> responding_macs)
-            {
-                // intersect with current ones now
-                Gee.List<INeighborhoodArc> lst_expected_now = mgr.current_arcs_for_broadcast(devs);
-                Gee.List<INeighborhoodArc> lst_expected_intersect = new ArrayList<INeighborhoodArc>();
-                foreach (var el in lst_expected)
-                    if (el in lst_expected_now)
-                        lst_expected_intersect.add(el);
-                lst_expected = lst_expected_intersect;
-                // prepare a list of missed arcs.
-                var lst_missed = new ArrayList<INeighborhoodArc>();
-                foreach (INeighborhoodArc expected in lst_expected)
-                    if (! (expected.neighbour_mac in responding_macs))
-                        lst_missed.add(expected);
-                // foreach missed arc launch in a tasklet
-                // the 'missing' callback.
-                foreach (INeighborhoodArc missed in lst_missed)
-                {
-                    ActOnMissingTasklet ts = new ActOnMissingTasklet();
-                    ts.missing_handler = missing_handler;
-                    ts.missed = missed;
-                    tasklet.spawn(ts);
-                }
-            }
-
-            private class ActOnMissingTasklet : Object, ITaskletSpawnable
-            {
-                public INeighborhoodMissingArcHandler missing_handler;
-                public INeighborhoodArc missed;
-                public void * func()
-                {
-                    missing_handler.missing(missed);
-                    return null;
-                }
-            }
         }
 
         /* Remove an arc.
@@ -869,16 +665,6 @@ namespace Netsukuku.Neighborhood
 
         public void nop(CallerInfo? caller = null)
         {
-        }
-
-        public void stop_monitor_all()
-        {
-            var copy_devs = new ArrayList<string>();
-            copy_devs.add_all(monitoring_devs.keys);
-            foreach (string dev in copy_devs)
-            {
-                stop_monitor(dev);
-            }
         }
     }
 }

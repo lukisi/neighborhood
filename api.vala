@@ -93,11 +93,4 @@ namespace Netsukuku.Neighborhood
                             string my_dev
                         );
     }
-
-    public delegate
-        IAddressManagerSkeleton? GetIdentitySkeletonFunc
-        (NodeID source_id, NodeID unicast_id, string peer_address);
-    public delegate
-        Gee.List<IAddressManagerSkeleton> GetIdentitySkeletonSetFunc
-        (NodeID source_id, Gee.List<NodeID> broadcast_set, string peer_address, string dev);
 }
