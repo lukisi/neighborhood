@@ -44,11 +44,6 @@ namespace Netsukuku.Neighborhood
         public abstract INeighborhoodNetworkInterface nic {get;}
     }
 
-    public interface INeighborhoodMissingArcHandler : Object
-    {
-        public abstract void missing(INeighborhoodArc arc);
-    }
-
     /* This interface is implemented by an object passed to the Neighbor manager
      * which uses it to actually obtain a stub to send messages to other nodes.
      */
