@@ -60,6 +60,18 @@ namespace Netsukuku.Neighborhood
     }
 
     /* This interface is implemented by an object passed to the Neighbor manager
+     * which uses it to query a CallerInfo.
+     */
+    public interface INeighborhoodQueryCallerInfo : Object
+    {
+        public abstract INeighborhoodNetworkInterface?
+        is_from_broadcast(CallerInfo rpc_caller);
+
+        public abstract INeighborhoodArc?
+        is_from_unicast(CallerInfo rpc_caller);
+    }
+
+    /* This interface is implemented by an object passed to the Neighbor manager
      * which uses it to manage addresses and routes of the O.S. (specifically in
      * order to have a fixed address for each NIC and be able to contact via TCP
      * its neighbors with their fixed addresses)

@@ -40,12 +40,14 @@ namespace Netsukuku.Neighborhood
         public NeighborhoodManager(
                                    int max_arcs,
                                    INeighborhoodStubFactory stub_factory,
+                                   INeighborhoodQueryCallerInfo query_caller_info,
                                    INeighborhoodIPRouteManager ip_mgr,
                                    owned NewLinklocalAddress new_linklocal_address)
         {
             this.my_id = new NeighborhoodNodeID();
             this.max_arcs = max_arcs;
             this.stub_factory = stub_factory;
+            this.query_caller_info = query_caller_info;
             this.ip_mgr = ip_mgr;
             nics = new HashMap<string, INeighborhoodNetworkInterface>();
             local_addresses = new HashMap<string, string>();
@@ -65,6 +67,7 @@ namespace Netsukuku.Neighborhood
         private NeighborhoodNodeID my_id;
         private int max_arcs;
         private INeighborhoodStubFactory stub_factory;
+        private INeighborhoodQueryCallerInfo query_caller_info;
         private INeighborhoodIPRouteManager ip_mgr;
         private HashMap<string, INeighborhoodNetworkInterface> nics;
         private HashMap<string, string> local_addresses;
@@ -82,7 +85,7 @@ namespace Netsukuku.Neighborhood
 
         // Signals:
         // New address assigned to a NIC.
-        public signal void nic_address_set(string dev, string address);
+        public signal void nic_address_set(INeighborhoodNetworkInterface nic, string address);
         // New arc formed.
         public signal void arc_added(INeighborhoodArc arc);
         // An arc is going to be removed.
@@ -92,7 +95,7 @@ namespace Netsukuku.Neighborhood
         // An arc changed its cost.
         public signal void arc_changed(INeighborhoodArc arc);
         // Address removed from a NIC, no more handling.
-        public signal void nic_address_unset(string dev, string address);
+        public signal void nic_address_unset(INeighborhoodNetworkInterface nic, string address);
 
         public NeighborhoodNodeID get_my_neighborhood_id()
         {
@@ -113,7 +116,7 @@ namespace Netsukuku.Neighborhood
             // get a new linklocal IP for this nic
             string local_address = new_linklocal_address();
             ip_mgr.add_address(local_address, dev);
-            nic_address_set(dev, local_address);
+            nic_address_set(nic, local_address);
             // start monitor
             MonitorRunTasklet ts = new MonitorRunTasklet();
             ts.mgr = this;
@@ -147,7 +150,7 @@ namespace Netsukuku.Neighborhood
             // remove local address
             string local_address = local_addresses[dev];
             ip_mgr.remove_address(local_address, dev);
-            nic_address_unset(dev, local_address);
+            nic_address_unset(nic, local_address);
             // cleanup private members
             monitoring_devs.unset(dev);
             nics.unset(dev);
@@ -162,17 +165,6 @@ namespace Netsukuku.Neighborhood
             {
                 stop_monitor(dev);
             }
-        }
-
-        private bool is_monitoring(string dev)
-        {
-            return monitoring_devs.has_key(dev);
-        }
-
-        private INeighborhoodNetworkInterface? get_monitoring_interface_from_dev(string dev)
-        {
-            if (is_monitoring(dev)) return nics[dev];
-            return null;
         }
 
         /* Runs in a tasklet foreach device
@@ -377,23 +369,16 @@ namespace Netsukuku.Neighborhood
         {
             assert(_rpc_caller != null);
             // This call has to be made in UDP broadcast, else ignore it.
-            if (! (_rpc_caller is BroadcastCallerInfo)) return;
-            BroadcastCallerInfo rpc_caller = (BroadcastCallerInfo)_rpc_caller;
+            INeighborhoodNetworkInterface? my_nic = query_caller_info.is_from_broadcast(_rpc_caller);
+            if (my_nic == null) tasklet.exit_tasklet(null);
             // This call should have a NeighborhoodNodeID, else ignore it.
             if (! (_its_id is NeighborhoodNodeID)) return;
             NeighborhoodNodeID its_id = (NeighborhoodNodeID)_its_id;
             // This is called in broadcast. Maybe it's me. It should not be the case.
             if (its_id.id == my_id.id) return;
             // It's a neighbour. The message came through my_nic. The MAC of the peer is its_mac.
-            string my_dev = rpc_caller.dev;
+            string my_dev = my_nic.dev;
             string my_addr = local_addresses[my_dev];
-            INeighborhoodNetworkInterface? my_nic
-                    = get_monitoring_interface_from_dev(my_dev);
-            if (my_nic == null)
-            {
-                warning(@"Neighborhood.here_i_am: $(my_dev) is not being monitored");
-                return;
-            }
 
             string its_id_id = @"$(its_id.id)";
             if (! arcs_by_itsmac.has_key(its_mac))
@@ -493,8 +478,8 @@ namespace Netsukuku.Neighborhood
         {
             assert(_rpc_caller != null);
             // This call has to be made in UDP broadcast, else ignore it.
-            if (! (_rpc_caller is BroadcastCallerInfo)) return;
-            BroadcastCallerInfo rpc_caller = (BroadcastCallerInfo)_rpc_caller;
+            INeighborhoodNetworkInterface? my_nic = query_caller_info.is_from_broadcast(_rpc_caller);
+            if (my_nic == null) tasklet.exit_tasklet(null);
             // This call should have a couple of NeighborhoodNodeID, else ignore it.
             if (! (_its_id is NeighborhoodNodeID)) return;
             NeighborhoodNodeID its_id = (NeighborhoodNodeID)_its_id;
@@ -503,15 +488,8 @@ namespace Netsukuku.Neighborhood
             // This is called in broadcast. Maybe it's me. It should not be the case.
             if (its_id.id == my_id.id) return;
             // It's a neighbour. The message came through my_nic. The MAC of the peer is its_mac.
-            string my_dev = rpc_caller.dev;
+            string my_dev = my_nic.dev;
             string my_addr = local_addresses[my_dev];
-            INeighborhoodNetworkInterface? my_nic
-                    = get_monitoring_interface_from_dev(my_dev);
-            if (my_nic == null)
-            {
-                warning(@"Neighborhood.request_arc: $(my_dev) is not being monitored");
-                return;
-            }
 
             // is message for me?
             if (dest_id.id != my_id.id) return;
@@ -566,23 +544,15 @@ namespace Netsukuku.Neighborhood
         {
             assert(_rpc_caller != null);
             // This call has to be made in TCP from a direct neighbor, else ignore it.
-            if (! (_rpc_caller is TcpclientCallerInfo)) tasklet.exit_tasklet(null);
-            TcpclientCallerInfo rpc_caller = (TcpclientCallerInfo)_rpc_caller;
-            string its_nic_addr = rpc_caller.peer_address;
-            string my_nic_addr = rpc_caller.my_address;
-
-            string my_dev = null;
-            foreach (string dev in local_addresses.keys) if (local_addresses[dev] == my_nic_addr) my_dev = dev;
-            if (my_dev == null)
-            {
-                warning(@"Neighborhood.can_you_export: $(my_nic_addr) is not of a monitored dev");
-                tasklet.exit_tasklet(null);
-            }
+            INeighborhoodArc? _arc = query_caller_info.is_from_unicast(_rpc_caller);
+            if (_arc == null) tasklet.exit_tasklet(null);
+            if (! (_arc is NeighborhoodRealArc)) tasklet.exit_tasklet(null);
+            NeighborhoodRealArc arc = (NeighborhoodRealArc)_arc;
+            string its_nic_addr = arc.neighbour_nic_addr;
+            string my_dev = arc.nic.dev;
 
             if (! arcs_by_mydev_itsll[my_dev].has_key(its_nic_addr)) tasklet.exit_tasklet(null);
             if (! arcs_by_mydev_itsll[my_dev][its_nic_addr].is_empty) tasklet.exit_tasklet(null);
-            assert(arcs_by_mydev_itsll[my_dev][its_nic_addr].size == 1);
-            NeighborhoodRealArc arc = arcs_by_mydev_itsll[my_dev][its_nic_addr][0];
 
             if (arc.exported) return true;
 
@@ -603,8 +573,8 @@ namespace Netsukuku.Neighborhood
         {
             assert(_rpc_caller != null);
             // This call has to be made in UDP broadcast, else ignore it.
-            if (! (_rpc_caller is BroadcastCallerInfo)) return;
-            BroadcastCallerInfo rpc_caller = (BroadcastCallerInfo)_rpc_caller;
+            INeighborhoodNetworkInterface? my_nic = query_caller_info.is_from_broadcast(_rpc_caller);
+            if (my_nic == null) tasklet.exit_tasklet(null);
             // This call should have a couple of NeighborhoodNodeID, else ignore it.
             if (! (_its_id is NeighborhoodNodeID)) return;
             NeighborhoodNodeID its_id = (NeighborhoodNodeID)_its_id;
@@ -613,15 +583,8 @@ namespace Netsukuku.Neighborhood
             // This is called in broadcast. Maybe it's me. It should not be the case.
             if (its_id.id == my_id.id) return;
             // It's a neighbour. The message came through my_nic. The MAC of the peer is its_mac.
-            string my_dev = rpc_caller.dev;
+            string my_dev = my_nic.dev;
             string my_addr = local_addresses[my_dev];
-            INeighborhoodNetworkInterface? my_nic
-                    = get_monitoring_interface_from_dev(my_dev);
-            if (my_nic == null)
-            {
-                warning(@"Neighborhood.remove_arc: $(my_dev) is not being monitored");
-                return;
-            }
 
             // is message for me?
             if (dest_id.id != my_id.id) return;
