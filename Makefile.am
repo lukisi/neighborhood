@@ -2,7 +2,6 @@ NULL =
 ACLOCAL_AMFLAGS = -I m4
 
 noinst_LTLIBRARIES = \
-	libmacgetter.la \
 	libneighborhood.la \
 	$(NULL)
 
@@ -12,17 +11,6 @@ check_PROGRAMS = \
 
 TESTS = \
 	test_serializables \
-	$(NULL)
-
-libmacgetter_la_SOURCES = \
-	mac-getter/hw.c \
-	mac-getter/hw.h \
-	$(NULL)
-
-libmacgetter_la_CPPFLAGS = \
-	$(NULL)
-
-libmacgetter_la_LIBADD = \
 	$(NULL)
 
 libneighborhood_la_SOURCES = \
