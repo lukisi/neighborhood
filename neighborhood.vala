@@ -157,16 +157,6 @@ namespace Netsukuku.Neighborhood
             local_addresses.unset(dev);
         }
 
-        public void stop_monitor_all()
-        {
-            var copy_devs = new ArrayList<string>();
-            copy_devs.add_all(monitoring_devs.keys);
-            foreach (string dev in copy_devs)
-            {
-                stop_monitor(dev);
-            }
-        }
-
         /* Runs in a tasklet foreach device
          */
         private class MonitorRunTasklet : Object, ITaskletSpawnable
@@ -242,7 +232,7 @@ namespace Netsukuku.Neighborhood
                     bool nop_check = false;
                     try
                     {
-                        INeighborhoodManagerStub tc = mgr.stub_factory.get_tcp(arc);
+                        INeighborhoodManagerStub tc = mgr.stub_factory.get_unicast(arc);
                         tc.nop();
                         nop_check = true;
                     } catch (StubError e) {
@@ -450,7 +440,7 @@ namespace Netsukuku.Neighborhood
             // can I export?
             bool can_i = exported_arcs.size < max_arcs;
             // can_you_export?
-            INeighborhoodManagerStub tc = stub_factory.get_tcp(cur_arc);
+            INeighborhoodManagerStub tc = stub_factory.get_unicast(cur_arc);
             bool can_you = false;
             try {
                 can_you = tc.can_you_export(can_i);

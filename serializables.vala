@@ -22,7 +22,7 @@ namespace Netsukuku.Neighborhood
 {
     public class NeighborhoodNodeID : Object, INeighborhoodNodeIDMessage
     {
-        public NeighborhoodNodeID()
+        internal NeighborhoodNodeID()
         {
             id = PRNGen.int_range(1, int.MAX);
         }
