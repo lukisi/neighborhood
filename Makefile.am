@@ -7,6 +7,7 @@ noinst_LTLIBRARIES = \
 
 check_PROGRAMS = \
 	test_serializables \
+	here_i_am \
 	$(NULL)
 
 TESTS = \
@@ -79,6 +80,51 @@ test_serializables_LDADD = \
 	$(GOBJECT_LIBS) \
 	$(GEE_LIBS) \
 	$(JSONGLIB_LIBS) \
+	$(NULL)
+
+here_i_am_SOURCES =  \
+	testsuites/here_i_am/here_i_am.vala \
+	testsuites/here_i_am/rngen.vala \
+	testsuites/here_i_am/serializables.vala \
+	testsuites/here_i_am/neighborhood_helpers.vala \
+	testsuites/here_i_am/neighborhood_signals.vala \
+	testsuites/here_i_am/rpc/skeleton_factory.vala \
+	testsuites/here_i_am/rpc/stub_factory.vala \
+	testsuites/here_i_am/rpc/module_stubs.vala \
+	neighborhood.vapi \
+	$(NULL)
+
+here_i_am_VALAFLAGS = \
+	--vapidir $(GEE_PREFIX)/share/vala/vapi \
+	--vapidir $(TASKLETSYSTEM_VAPIDIR) \
+	--vapidir $(PTHTASKLET_VAPIDIR) \
+	--vapidir $(NTKDCOMMON_VAPIDIR) \
+	--vapidir $(NTKDRPC_VAPIDIR) \
+	--pkg gee-0.8 \
+	--pkg ntkd-common \
+	--pkg tasklet-system \
+	--pkg pth-tasklet \
+	--pkg ntkdrpc \
+	$(NULL)
+
+here_i_am_CPPFLAGS = \
+	-w \
+	$(GOBJECT_CFLAGS) \
+	$(GEE_CFLAGS) \
+	$(NTKDCOMMON_CFLAGS) \
+	$(TASKLETSYSTEM_CFLAGS) \
+	$(PTHTASKLET_CFLAGS) \
+	$(NTKDRPC_CFLAGS) \
+	$(NULL)
+
+here_i_am_LDADD = \
+	$(GOBJECT_LIBS) \
+	$(GEE_LIBS) \
+	$(NTKDCOMMON_LIBS) \
+	$(TASKLETSYSTEM_LIBS) \
+	$(PTHTASKLET_LIBS) \
+	$(NTKDRPC_LIBS) \
+	$(builddir)/libneighborhood.la \
 	$(NULL)
 
 MAINTAINERCLEANFILES = \

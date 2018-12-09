@@ -9,6 +9,14 @@ neighborhood.vapi
 Makefile.in
 Makefile
 testsuites/test_serializables/test_serializables.c
+testsuites/here_i_am/here_i_am.c
+testsuites/here_i_am/rngen.c
+testsuites/here_i_am/serializables.c
+testsuites/here_i_am/neighborhood_helpers.c
+testsuites/here_i_am/neighborhood_signals.c
+testsuites/here_i_am/rpc/skeleton_factory.c
+testsuites/here_i_am/rpc/stub_factory.c
+testsuites/here_i_am/rpc/module_stubs.c
 neighborhoodclient
 *.log
 *.trs
