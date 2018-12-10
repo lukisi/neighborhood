@@ -9,7 +9,7 @@ namespace TestHereiam
     {
         public void add_address(string my_addr, string my_dev)
         {
-            error("not implemented yet");
+            print(@"NeighborhoodIPRouteManager.add_address($my_addr, $my_dev)\n");
         }
 
         public void add_neighbor(string my_addr, string my_dev, string neighbor_addr)
@@ -24,7 +24,7 @@ namespace TestHereiam
 
         public void remove_address(string my_addr, string my_dev)
         {
-            error("not implemented yet");
+            print(@"NeighborhoodIPRouteManager.remove_address($my_addr, $my_dev)\n");
         }
     }
 
@@ -56,7 +56,8 @@ namespace TestHereiam
         {
             string? my_dev = skeleton_factory.from_caller_get_mydev(_rpc_caller);
             if (my_dev == null) return null;
-            error("not implemented yet");
+            PseudoNetworkInterface pseudonic = pseudonic_map[my_dev];
+            return pseudonic.nic;
         }
 
         public INeighborhoodArc?
@@ -66,31 +67,30 @@ namespace TestHereiam
         }
     }
 
-    class PseudoNetworkInterface : Object, INeighborhoodNetworkInterface
+    class NeighborhoodNetworkInterface : Object, INeighborhoodNetworkInterface
     {
-        public PseudoNetworkInterface(string dev, string mac)
+        public NeighborhoodNetworkInterface(PseudoNetworkInterface pseudonic)
         {
-            _dev = dev;
-            _mac = mac;
+            this.pseudonic = pseudonic;
         }
-        private string _dev;
-        private string _mac;
+        public PseudoNetworkInterface pseudonic {get; private set;}
 
         public string dev {
             get {
-                return _dev;
+                return pseudonic.dev;
             }
         }
 
         public string mac {
             get {
-                return _mac;
+                return pseudonic.mac;
             }
         }
 
         public long measure_rtt(string peer_addr, string peer_mac, string my_dev, string my_addr) throws NeighborhoodGetRttError
         {
-            error("not implemented yet");
+            return 1000;
+            // TODO
         }
     }
 }

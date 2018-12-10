@@ -16,7 +16,7 @@ namespace TestHereiam
     SkeletonFactory skeleton_factory;
     StubFactory stub_factory;
 
-    ArrayList<string> listen_pathname_list;
+    HashMap<string,PseudoNetworkInterface> pseudonic_map;
 
     int main(string[] _args)
     {
@@ -66,11 +66,6 @@ namespace TestHereiam
         // RPC
         skeleton_factory = new SkeletonFactory();
         stub_factory = new StubFactory();
-        // The RPC library will need many tasklets for stream/datagram listeners.
-        // All of them will be identified by a string listen_pathname
-        listen_pathname_list = new ArrayList<string>();
-        // The tasklets will be launched after the NeighborhoodManager is
-        // created and ready to start_monitor.
 
         // Init module Neighborhood
         neighborhood_mgr = new NeighborhoodManager(
@@ -88,6 +83,71 @@ namespace TestHereiam
         neighborhood_mgr.arc_removed.connect(neighborhood_arc_removed);
         neighborhood_mgr.nic_address_unset.connect(neighborhood_nic_address_unset);
 
-        error("TODO");
+        pseudonic_map = new HashMap<string,PseudoNetworkInterface>();
+        foreach (string dev in devs)
+        {
+            assert(!(dev in pseudonic_map.keys));
+            string listen_pathname = @"recv_$(pid)_$(dev)";
+            string send_pathname = @"send_$(pid)_$(dev)";
+            string mac = @"fe:aa:aa:$(PRNGen.int_range(10, 99)):$(PRNGen.int_range(10, 99)):$(PRNGen.int_range(10, 99))";
+            pseudonic_map[dev] = new PseudoNetworkInterface(dev, listen_pathname, send_pathname, mac);
+
+            // Start listen datagram on dev
+            skeleton_factory.start_datagram_system_listen(listen_pathname, send_pathname, new NeighbourSrcNic(mac));
+            // Run monitor. This will also set the IP link-local address and the field will be compiled.
+            neighborhood_mgr.start_monitor(pseudonic_map[dev].nic);
+        }
+
+        // Temporary: register handlers for SIGINT and SIGTERM to exit
+        Posix.@signal(Posix.Signal.INT, safe_exit);
+        Posix.@signal(Posix.Signal.TERM, safe_exit);
+        // Main loop
+        while (true)
+        {
+            tasklet.ms_wait(100);
+            if (do_me_exit) break;
+        }
+
+        // Call stop_monitor of NeighborhoodManager.
+        foreach (string dev in pseudonic_map.keys)
+        {
+            PseudoNetworkInterface pseudonic = pseudonic_map[dev];
+            skeleton_factory.stop_stream_system_listen(pseudonic.st_listen_pathname);
+            neighborhood_mgr.stop_monitor(dev);
+            skeleton_factory.stop_datagram_system_listen(pseudonic.listen_pathname);
+        }
+
+        // Then we destroy the object NeighborhoodManager.
+        neighborhood_mgr = null;
+        tasklet.ms_wait(100);
+
+        PthTaskletImplementer.kill();
+        return 0;
+    }
+
+    bool do_me_exit = false;
+    void safe_exit(int sig)
+    {
+        // We got here because of a signal. Quick processing.
+        do_me_exit = true;
+    }
+
+    class PseudoNetworkInterface : Object
+    {
+        public PseudoNetworkInterface(string dev, string listen_pathname, string send_pathname, string mac)
+        {
+            this.dev = dev;
+            this.listen_pathname = listen_pathname;
+            this.send_pathname = send_pathname;
+            this.mac = mac;
+            nic = new NeighborhoodNetworkInterface(this);
+        }
+        public string mac {get; private set;}
+        public string send_pathname {get; private set;}
+        public string listen_pathname {get; private set;}
+        public string dev {get; private set;}
+        public string linklocal {get; set;}
+        public string st_listen_pathname {get; set;}
+        public INeighborhoodNetworkInterface nic {get; set;}
     }
 }

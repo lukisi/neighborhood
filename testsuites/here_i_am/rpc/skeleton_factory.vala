@@ -79,13 +79,33 @@ namespace TestHereiam
 
         private Gee.List<IAddressManagerSkeleton> get_dispatcher_set(DatagramCallerInfo caller_info)
         {
-            error("not implemented yet");
+            if (! (caller_info.source_id is WholeNodeSourceID)) abort_tasklet(@"Bad caller_info.source_id");
+            if (! (caller_info.broadcast_id is EveryWholeNodeBroadcastID)) abort_tasklet(@"Bad caller_info.broadcast_id");
+            Gee.List<IAddressManagerSkeleton> ret = new ArrayList<IAddressManagerSkeleton>();
+            ret.add(node_skeleton);
+            return ret;
         }
 
         public string?
         from_caller_get_mydev(CallerInfo _rpc_caller)
         {
-            error("not implemented yet");
+            if (_rpc_caller is StreamCallerInfo)
+            {error("not implemented yet");}
+            else if (_rpc_caller is DatagramCallerInfo)
+            {
+                DatagramCallerInfo rpc_caller = (DatagramCallerInfo)_rpc_caller;
+                assert(rpc_caller.listener is DatagramSystemListener);
+                DatagramSystemListener _listener = (DatagramSystemListener)rpc_caller.listener;
+                foreach (string dev in pseudonic_map.keys)
+                {
+                    PseudoNetworkInterface pseudonic = pseudonic_map[dev];
+                    if (pseudonic.listen_pathname != _listener.listen_pathname) continue;
+                    if (pseudonic.send_pathname != _listener.send_pathname) continue;
+                    return dev;
+                }
+                assert_not_reached();
+            }
+            else abort_tasklet(@"Unknown caller_info: $(_rpc_caller.get_type().name())");
         }
 
         public INeighborhoodArc?
