@@ -52,7 +52,7 @@ namespace Netsukuku.Neighborhood
             nics = new HashMap<string, INeighborhoodNetworkInterface>();
             local_addresses = new HashMap<string, string>();
             monitoring_devs = new HashMap<string, ITaskletHandle>();
-            arcs = new ArrayList<NeighborhoodRealArc>();
+            arcs_grandtotal = new ArrayList<NeighborhoodRealArc>();
             arcs_by_itsmac = new HashMap<string, ArrayList<NeighborhoodRealArc>>();
             arcs_by_itsll = new HashMap<string, ArrayList<NeighborhoodRealArc>>();
             arcs_by_itsnodeid = new HashMap<string, ArrayList<NeighborhoodRealArc>>();
@@ -72,7 +72,7 @@ namespace Netsukuku.Neighborhood
         private HashMap<string, INeighborhoodNetworkInterface> nics;
         private HashMap<string, string> local_addresses;
         private HashMap<string, ITaskletHandle> monitoring_devs;
-        private ArrayList<NeighborhoodRealArc> arcs;
+        private ArrayList<NeighborhoodRealArc> arcs_grandtotal;
         private HashMap<string, ArrayList<NeighborhoodRealArc>> arcs_by_itsmac;
         private HashMap<string, ArrayList<NeighborhoodRealArc>> arcs_by_itsll;
         private HashMap<string, ArrayList<NeighborhoodRealArc>> arcs_by_itsnodeid;
@@ -140,7 +140,7 @@ namespace Netsukuku.Neighborhood
             INeighborhoodNetworkInterface nic = nics[dev];
             // remove arcs on this nic
             ArrayList<NeighborhoodRealArc> todel = new ArrayList<NeighborhoodRealArc>();
-            foreach (NeighborhoodRealArc arc in arcs) if (arc.nic == nic) todel.add(arc);
+            foreach (NeighborhoodRealArc arc in arcs_grandtotal) if (arc.nic == nic) todel.add(arc);
             foreach (NeighborhoodRealArc arc in todel)
             {
                 remove_my_arc(arc);
@@ -293,7 +293,7 @@ namespace Netsukuku.Neighborhood
         public Gee.List<INeighborhoodArc> current_arcs()
         {
             var ret = new ArrayList<INeighborhoodArc>();
-            foreach (NeighborhoodRealArc arc in arcs) if (arc.available) ret.add(arc);
+            foreach (NeighborhoodRealArc arc in arcs_grandtotal) if (arc.available) ret.add(arc);
             return ret;
         }
 
@@ -317,10 +317,11 @@ namespace Netsukuku.Neighborhood
             // remove the arc
             arcs_by_itsmac[arc.neighbour_mac].remove(arc);
             arcs_by_itsll[arc.neighbour_nic_addr].remove(arc);
-            arcs_by_itsnodeid[@"arc.neighbour_id.id"].remove(arc);
+            arcs_by_itsnodeid[@"$(arc.neighbour_id.id)"].remove(arc);
             arcs_by_mydev_itsmac[my_dev][arc.neighbour_mac].remove(arc);
             arcs_by_mydev_itsll[my_dev][arc.neighbour_nic_addr].remove(arc);
-            arcs_by_mydev_itsnodeid[my_dev][@"arc.neighbour_id.id"].remove(arc);
+            arcs_by_mydev_itsnodeid[my_dev][@"$(arc.neighbour_id.id)"].remove(arc);
+            arcs_grandtotal.remove(arc);
             // try and tell the neighbour to do the same
             if (do_tell)
             {
@@ -387,7 +388,7 @@ namespace Netsukuku.Neighborhood
             if (! arcs_by_mydev_itsnodeid[my_dev].has_key(its_id_id))
                 arcs_by_mydev_itsnodeid[my_dev][its_id_id] = new ArrayList<NeighborhoodRealArc>();
 
-            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"a.neighbour_id.id" != its_id_id) != -1)
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"$(a.neighbour_id.id)" != its_id_id) != -1)
                 return; // ignore call. no different neighbors have same MAC.
 
             if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.neighbour_nic_addr != its_nic_addr) != -1)
@@ -404,7 +405,7 @@ namespace Netsukuku.Neighborhood
             if (i != -1)
             {
                 cur_arc = arcs_by_itsmac[its_mac][i];
-                assert(@"cur_arc.neighbour_id.id" == its_id_id);
+                assert(@"$(cur_arc.neighbour_id.id)" == its_id_id);
                 assert(cur_arc.neighbour_nic_addr != its_nic_addr);
             }
             else
@@ -416,6 +417,7 @@ namespace Netsukuku.Neighborhood
                 arcs_by_mydev_itsmac[my_dev][its_mac].add(cur_arc);
                 arcs_by_mydev_itsll[my_dev][its_nic_addr].add(cur_arc);
                 arcs_by_mydev_itsnodeid[my_dev][its_id_id].add(cur_arc);
+                arcs_grandtotal.add(cur_arc);
                 INeighborhoodManagerStub bc = stub_factory.get_broadcast_for_radar(my_nic);
                 try {
                     bc.request_arc(its_id, its_mac, its_nic_addr, my_id, my_nic.mac, my_addr);
@@ -504,7 +506,7 @@ namespace Netsukuku.Neighborhood
             if (! arcs_by_mydev_itsnodeid[my_dev].has_key(its_id_id))
                 arcs_by_mydev_itsnodeid[my_dev][its_id_id] = new ArrayList<NeighborhoodRealArc>();
 
-            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"a.neighbour_id.id" != its_id_id) != -1)
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"$(a.neighbour_id.id)" != its_id_id) != -1)
                 return; // ignore call. no different neighbors have same MAC.
 
             if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.neighbour_nic_addr != its_nic_addr) != -1)
@@ -527,6 +529,7 @@ namespace Netsukuku.Neighborhood
             arcs_by_mydev_itsmac[my_dev][its_mac].add(new_arc);
             arcs_by_mydev_itsll[my_dev][its_nic_addr].add(new_arc);
             arcs_by_mydev_itsnodeid[my_dev][its_id_id].add(new_arc);
+            arcs_grandtotal.add(new_arc);
             ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
         }
 
@@ -534,7 +537,7 @@ namespace Netsukuku.Neighborhood
         {
             assert(_rpc_caller != null);
             // This call has to be made in TCP from a direct neighbor, else ignore it.
-            INeighborhoodArc? _arc = query_caller_info.is_from_unicast(_rpc_caller);
+            INeighborhoodArc? _arc = query_caller_info.is_from_unicast(_rpc_caller, arcs_grandtotal);
             if (_arc == null) tasklet.exit_tasklet(null);
             if (! (_arc is NeighborhoodRealArc)) tasklet.exit_tasklet(null);
             NeighborhoodRealArc arc = (NeighborhoodRealArc)_arc;
@@ -599,7 +602,7 @@ namespace Netsukuku.Neighborhood
             if (! arcs_by_mydev_itsnodeid[my_dev].has_key(its_id_id))
                 arcs_by_mydev_itsnodeid[my_dev][its_id_id] = new ArrayList<NeighborhoodRealArc>();
 
-            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"a.neighbour_id.id" != its_id_id) != -1)
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => @"$(a.neighbour_id.id)" != its_id_id) != -1)
                 return; // ignore call. no different neighbors have same MAC.
 
             if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.neighbour_nic_addr != its_nic_addr) != -1)
@@ -610,7 +613,7 @@ namespace Netsukuku.Neighborhood
             if (i != -1)
             {
                 arc = arcs_by_itsmac[its_mac][i];
-                assert(@"arc.neighbour_id.id" == its_id_id);
+                assert(@"$(arc.neighbour_id.id)" == its_id_id);
                 assert(arc.neighbour_nic_addr != its_nic_addr);
                 remove_my_arc(arc, false);
             }

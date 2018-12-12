@@ -68,7 +68,7 @@ namespace Netsukuku.Neighborhood
         is_from_broadcast(CallerInfo rpc_caller);
 
         public abstract INeighborhoodArc?
-        is_from_unicast(CallerInfo rpc_caller);
+        is_from_unicast(CallerInfo rpc_caller, Gee.List<INeighborhoodArc> arcs);
     }
 
     /* This interface is implemented by an object passed to the Neighbor manager
