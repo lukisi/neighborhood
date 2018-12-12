@@ -66,6 +66,7 @@ namespace TestHereiam
 
         private IAddressManagerSkeleton? get_dispatcher(StreamCallerInfo caller_info)
         {
+            // in this test we have only WholeNodeUnicastID
             if (! (caller_info.source_id is WholeNodeSourceID)) abort_tasklet(@"Bad caller_info.source_id");
             WholeNodeSourceID _source_id = (WholeNodeSourceID)caller_info.source_id;
             NeighborhoodNodeID neighbour_id = _source_id.id;
@@ -73,8 +74,7 @@ namespace TestHereiam
             WholeNodeUnicastID _unicast_id = (WholeNodeUnicastID)caller_info.unicast_id;
             NeighborhoodNodeID my_id = _unicast_id.neighbour_id;
             if (! my_id.equals(node_skeleton.id)) abort_tasklet(@"caller_info.unicast_id is not me.");
-            // TODO cicla i suoi archi
-            error("not implemented yet");
+            return node_skeleton;
         }
 
         private Gee.List<IAddressManagerSkeleton> get_dispatcher_set(DatagramCallerInfo caller_info)

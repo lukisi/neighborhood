@@ -49,6 +49,10 @@ namespace TestHereiam
         // Initialize modules that have remotable methods (serializable classes need to be registered).
         NeighborhoodManager.init(tasklet);
         //typeof(MainIdentitySourceID).class_peek();
+        typeof(WholeNodeSourceID).class_peek();
+        typeof(WholeNodeUnicastID).class_peek();
+        typeof(EveryWholeNodeBroadcastID).class_peek();
+        typeof(NeighbourSrcNic).class_peek();
 
         // Initialize pseudo-random number generators.
         uint32 seed_prn = 0;
@@ -57,7 +61,7 @@ namespace TestHereiam
             string _seed = @"$(pid)_$(devs[0])";
             seed_prn = (uint32)_seed.hash();
         }
-        //PRNGen.init_rngen(null, seed_prn);
+        PRNGen.init_rngen(null, seed_prn);
         NeighborhoodManager.init_rngen(null, seed_prn);
 
         // Pass tasklet system to the RPC library (ntkdrpc)
@@ -94,6 +98,7 @@ namespace TestHereiam
 
             // Start listen datagram on dev
             skeleton_factory.start_datagram_system_listen(listen_pathname, send_pathname, new NeighbourSrcNic(mac));
+            print(@"started datagram_system_listen $(listen_pathname) $(send_pathname) $(mac).\n");
             // Run monitor. This will also set the IP link-local address and the field will be compiled.
             neighborhood_mgr.start_monitor(pseudonic_map[dev].nic);
         }
@@ -113,8 +118,10 @@ namespace TestHereiam
         {
             PseudoNetworkInterface pseudonic = pseudonic_map[dev];
             skeleton_factory.stop_stream_system_listen(pseudonic.st_listen_pathname);
+            print(@"stopped stream_system_listen $(pseudonic.st_listen_pathname).\n");
             neighborhood_mgr.stop_monitor(dev);
             skeleton_factory.stop_datagram_system_listen(pseudonic.listen_pathname);
+            print(@"stopped datagram_system_listen $(pseudonic.listen_pathname).\n");
         }
 
         // Then we destroy the object NeighborhoodManager.
