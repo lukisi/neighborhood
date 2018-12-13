@@ -400,37 +400,29 @@ namespace Netsukuku.Neighborhood
             if (find_arc_in_list(arcs_by_itsnodeid[its_id_id], (a) => a.nic.dev == my_dev && a.neighbour_mac != its_mac && a.exported) != -1)
                 return; // ignore call. I already have an arc with my_dev towards another NIC of same neighbor.
 
-            NeighborhoodRealArc? cur_arc = null;
-            int i = find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev == my_dev);
-            if (i != -1)
-            {
-                cur_arc = arcs_by_itsmac[its_mac][i];
-                assert(@"$(cur_arc.neighbour_id.id)" == its_id_id);
-                assert(cur_arc.neighbour_nic_addr != its_nic_addr);
-            }
-            else
-            {
-                cur_arc = new NeighborhoodRealArc(its_id, its_mac, its_nic_addr, my_nic);
-                arcs_by_itsmac[its_mac].add(cur_arc);
-                arcs_by_itsll[its_nic_addr].add(cur_arc);
-                arcs_by_itsnodeid[its_id_id].add(cur_arc);
-                arcs_by_mydev_itsmac[my_dev][its_mac].add(cur_arc);
-                arcs_by_mydev_itsll[my_dev][its_nic_addr].add(cur_arc);
-                arcs_by_mydev_itsnodeid[my_dev][its_id_id].add(cur_arc);
-                arcs_grandtotal.add(cur_arc);
-                ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
-                INeighborhoodManagerStub bc = stub_factory.get_broadcast_for_radar(my_nic);
-                try {
-                    bc.request_arc(its_id, its_mac, its_nic_addr, my_id, my_nic.mac, my_addr);
-                } catch (StubError e) {
-                    warning(@"Call to request_arc: got StubError: $(e.message)");
-                    // failed
-                    return;
-                } catch (DeserializeError e) {
-                    warning(@"Call to request_arc: got DeserializeError: $(e.message)");
-                    // failed
-                    return;
-                }
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev == my_dev) != -1)
+                return; // ignore call. I already have the arc that this message would add.
+
+            NeighborhoodRealArc? cur_arc = new NeighborhoodRealArc(its_id, its_mac, its_nic_addr, my_nic);
+            arcs_by_itsmac[its_mac].add(cur_arc);
+            arcs_by_itsll[its_nic_addr].add(cur_arc);
+            arcs_by_itsnodeid[its_id_id].add(cur_arc);
+            arcs_by_mydev_itsmac[my_dev][its_mac].add(cur_arc);
+            arcs_by_mydev_itsll[my_dev][its_nic_addr].add(cur_arc);
+            arcs_by_mydev_itsnodeid[my_dev][its_id_id].add(cur_arc);
+            arcs_grandtotal.add(cur_arc);
+            ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
+            INeighborhoodManagerStub bc = stub_factory.get_broadcast_for_radar(my_nic);
+            try {
+                bc.request_arc(its_id, its_mac, its_nic_addr, my_id, my_nic.mac, my_addr);
+            } catch (StubError e) {
+                warning(@"Call to request_arc: got StubError: $(e.message)");
+                // failed
+                return;
+            } catch (DeserializeError e) {
+                warning(@"Call to request_arc: got DeserializeError: $(e.message)");
+                // failed
+                return;
             }
         }
 
@@ -535,8 +527,6 @@ namespace Netsukuku.Neighborhood
             if (_arc == null) tasklet.exit_tasklet(null);
             if (! (_arc is NeighborhoodRealArc)) tasklet.exit_tasklet(null);
             NeighborhoodRealArc arc = (NeighborhoodRealArc)_arc;
-            string its_nic_addr = arc.neighbour_nic_addr;
-            string my_dev = arc.nic.dev;
 
             if (arc.exported) return true;
 
