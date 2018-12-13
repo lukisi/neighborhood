@@ -232,7 +232,7 @@ namespace Netsukuku.Neighborhood
                     bool nop_check = false;
                     try
                     {
-                        INeighborhoodManagerStub tc = mgr.stub_factory.get_unicast(arc);
+                        INeighborhoodManagerStub tc = mgr.stub_factory.get_unicast(arc, false);
                         tc.nop();
                         nop_check = true;
                     } catch (StubError e) {
@@ -299,7 +299,7 @@ namespace Netsukuku.Neighborhood
 
         /* Remove an arc.
          */
-        public void remove_my_arc(INeighborhoodArc _arc, bool do_tell=true)
+        public void remove_my_arc(INeighborhoodArc _arc, bool is_still_usable=true)
         {
             if (!(_arc is NeighborhoodRealArc)) return;
             NeighborhoodRealArc arc = (NeighborhoodRealArc)_arc;
@@ -308,7 +308,7 @@ namespace Netsukuku.Neighborhood
             // signal removing arc
             if (arc.exported)
             {
-                if (arc.available) arc_removing(arc, do_tell);
+                if (arc.available) arc_removing(arc, is_still_usable);
             }
             string my_dev = arc.nic.dev;
             string my_addr = local_addresses[my_dev];
@@ -323,7 +323,7 @@ namespace Netsukuku.Neighborhood
             arcs_by_mydev_itsnodeid[my_dev][@"$(arc.neighbour_id.id)"].remove(arc);
             arcs_grandtotal.remove(arc);
             // try and tell the neighbour to do the same
-            if (do_tell)
+            if (is_still_usable)
             {
                 // use broadcast, we just removed the local_address of the neighbor
                 INeighborhoodManagerStub bc = stub_factory.get_broadcast_for_radar(arc.nic);
