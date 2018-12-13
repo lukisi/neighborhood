@@ -418,6 +418,7 @@ namespace Netsukuku.Neighborhood
                 arcs_by_mydev_itsll[my_dev][its_nic_addr].add(cur_arc);
                 arcs_by_mydev_itsnodeid[my_dev][its_id_id].add(cur_arc);
                 arcs_grandtotal.add(cur_arc);
+                ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
                 INeighborhoodManagerStub bc = stub_factory.get_broadcast_for_radar(my_nic);
                 try {
                     bc.request_arc(its_id, its_mac, its_nic_addr, my_id, my_nic.mac, my_addr);
@@ -430,37 +431,6 @@ namespace Netsukuku.Neighborhood
                     // failed
                     return;
                 }
-                ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
-                // wait a bit for neighbor to do the same
-                tasklet.ms_wait(1000);
-                // during that wait, some tasklet may have worked on cur_arc.
-            }
-
-            if (cur_arc.exported)
-                return; // ignore call.
-
-            // can I export?
-            bool can_i = exported_arcs.size < max_arcs;
-            // can_you_export?
-            INeighborhoodManagerStub tc = stub_factory.get_unicast(cur_arc);
-            bool can_you = false;
-            try {
-                can_you = tc.can_you_export(can_i);
-            } catch (StubError e) {
-                warning(@"Call to can_you_export: got StubError: $(e.message)");
-                // failed
-                return;
-            } catch (DeserializeError e) {
-                warning(@"Call to can_you_export: got DeserializeError: $(e.message)");
-                // failed
-                return;
-            }
-            if (can_i && can_you)
-            {
-                cur_arc.exported = true;
-                exported_arcs.add(cur_arc);
-                // start periodical ping
-                start_arc_monitor(cur_arc);
             }
         }
 
@@ -531,6 +501,30 @@ namespace Netsukuku.Neighborhood
             arcs_by_mydev_itsnodeid[my_dev][its_id_id].add(new_arc);
             arcs_grandtotal.add(new_arc);
             ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
+
+            // can I export?
+            bool can_i = exported_arcs.size < max_arcs;
+            // can_you_export?
+            INeighborhoodManagerStub tc = stub_factory.get_unicast(new_arc);
+            bool can_you = false;
+            try {
+                can_you = tc.can_you_export(can_i);
+            } catch (StubError e) {
+                warning(@"Call to can_you_export: got StubError: $(e.message)");
+                // failed
+                return;
+            } catch (DeserializeError e) {
+                warning(@"Call to can_you_export: got DeserializeError: $(e.message)");
+                // failed
+                return;
+            }
+            if (can_i && can_you)
+            {
+                new_arc.exported = true;
+                exported_arcs.add(new_arc);
+                // start periodical ping
+                start_arc_monitor(new_arc);
+            }
         }
 
         public bool can_you_export(bool peer_can_export, CallerInfo? _rpc_caller=null)
@@ -543,9 +537,6 @@ namespace Netsukuku.Neighborhood
             NeighborhoodRealArc arc = (NeighborhoodRealArc)_arc;
             string its_nic_addr = arc.neighbour_nic_addr;
             string my_dev = arc.nic.dev;
-
-            if (! arcs_by_mydev_itsll[my_dev].has_key(its_nic_addr)) tasklet.exit_tasklet(null);
-            if (! arcs_by_mydev_itsll[my_dev][its_nic_addr].is_empty) tasklet.exit_tasklet(null);
 
             if (arc.exported) return true;
 
