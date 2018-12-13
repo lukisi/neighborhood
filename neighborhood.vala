@@ -605,7 +605,7 @@ namespace Netsukuku.Neighborhood
             {
                 arc = arcs_by_itsmac[its_mac][i];
                 assert(@"$(arc.neighbour_id.id)" == its_id_id);
-                assert(arc.neighbour_nic_addr != its_nic_addr);
+                assert(arc.neighbour_nic_addr == its_nic_addr);
                 remove_my_arc(arc, false);
             }
         }
