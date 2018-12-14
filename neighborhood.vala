@@ -394,10 +394,10 @@ namespace Netsukuku.Neighborhood
             if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.neighbour_nic_addr != its_nic_addr) != -1)
                 return; // ignore call. each MAC has a fixed linklocal.
 
-            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev != my_dev && a.exported) != -1)
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev != my_dev) != -1)
                 return; // ignore call. I already have an arc with another NIC of mines towards its_mac.
 
-            if (find_arc_in_list(arcs_by_itsnodeid[its_id_id], (a) => a.nic.dev == my_dev && a.neighbour_mac != its_mac && a.exported) != -1)
+            if (find_arc_in_list(arcs_by_itsnodeid[its_id_id], (a) => a.nic.dev == my_dev && a.neighbour_mac != its_mac) != -1)
                 return; // ignore call. I already have an arc with my_dev towards another NIC of same neighbor.
 
             if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev == my_dev) != -1)
@@ -474,10 +474,10 @@ namespace Netsukuku.Neighborhood
             if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.neighbour_nic_addr != its_nic_addr) != -1)
                 return; // ignore call. each MAC has a fixed linklocal.
 
-            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev != my_dev && a.exported) != -1)
+            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev != my_dev) != -1)
                 return; // ignore call. I already have an arc with another NIC of mines towards its_mac.
 
-            if (find_arc_in_list(arcs_by_itsnodeid[its_id_id], (a) => a.nic.dev == my_dev && a.neighbour_mac != its_mac && a.exported) != -1)
+            if (find_arc_in_list(arcs_by_itsnodeid[its_id_id], (a) => a.nic.dev == my_dev && a.neighbour_mac != its_mac) != -1)
                 return; // ignore call. I already have an arc with my_dev towards another NIC of same neighbor.
 
             if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev == my_dev) != -1)

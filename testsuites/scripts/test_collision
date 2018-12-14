@@ -1,0 +1,35 @@
+#!/bin/bash
+
+eth_domain -i 12_eth0 -i 45_eth0 -i 12_eth1 -i 45_eth1 &
+ETH_PID=$!
+sleep 0.3
+
+./system_peer -i eth0 -i eth1 -p 12 --check-count-arcs 2 > test_collision_12_out.txt 2>&1 &
+PEER_12_PID=$!
+sleep 0.3
+./system_peer -i eth0 -i eth1 -p 45 --check-count-arcs 2 > test_collision_45_out.txt 2>&1 &
+PEER_45_PID=$!
+sleep 0.3
+
+sleep 2
+
+# interrupt peer
+kill $PEER_12_PID
+# wait for peer and note down its retval
+wait $PEER_12_PID
+PEER_12_RET=$?
+
+sleep 2
+
+# interrupt peer
+kill $PEER_45_PID
+# wait for peer and note down its retval
+wait $PEER_45_PID
+PEER_45_RET=$?
+
+# kill proxy demons
+kill $ETH_PID
+
+# check testers retval
+test $PEER_12_RET -eq 0 || exit 1
+test $PEER_45_RET -eq 0 || exit 2

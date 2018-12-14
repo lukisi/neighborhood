@@ -13,6 +13,7 @@ check_PROGRAMS = \
 TESTS = \
 	test_serializables \
 	test_count_arcs \
+	test_collision \
 	$(NULL)
 
 libneighborhood_la_SOURCES = \
