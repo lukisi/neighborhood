@@ -7,11 +7,12 @@ noinst_LTLIBRARIES = \
 
 check_PROGRAMS = \
 	test_serializables \
-	here_i_am \
+	system_peer \
 	$(NULL)
 
 TESTS = \
 	test_serializables \
+	test_count_arcs \
 	$(NULL)
 
 libneighborhood_la_SOURCES = \
@@ -82,19 +83,19 @@ test_serializables_LDADD = \
 	$(JSONGLIB_LIBS) \
 	$(NULL)
 
-here_i_am_SOURCES =  \
-	testsuites/here_i_am/here_i_am.vala \
-	testsuites/here_i_am/rngen.vala \
-	testsuites/here_i_am/serializables.vala \
-	testsuites/here_i_am/neighborhood_helpers.vala \
-	testsuites/here_i_am/neighborhood_signals.vala \
-	testsuites/here_i_am/rpc/skeleton_factory.vala \
-	testsuites/here_i_am/rpc/stub_factory.vala \
-	testsuites/here_i_am/rpc/module_stubs.vala \
+system_peer_SOURCES =  \
+	testsuites/system_peer/system_peer.vala \
+	testsuites/system_peer/rngen.vala \
+	testsuites/system_peer/serializables.vala \
+	testsuites/system_peer/neighborhood_helpers.vala \
+	testsuites/system_peer/neighborhood_signals.vala \
+	testsuites/system_peer/rpc/skeleton_factory.vala \
+	testsuites/system_peer/rpc/stub_factory.vala \
+	testsuites/system_peer/rpc/module_stubs.vala \
 	neighborhood.vapi \
 	$(NULL)
 
-here_i_am_VALAFLAGS = \
+system_peer_VALAFLAGS = \
 	--vapidir $(GEE_PREFIX)/share/vala/vapi \
 	--vapidir $(TASKLETSYSTEM_VAPIDIR) \
 	--vapidir $(PTHTASKLET_VAPIDIR) \
@@ -107,7 +108,7 @@ here_i_am_VALAFLAGS = \
 	--pkg ntkdrpc \
 	$(NULL)
 
-here_i_am_CPPFLAGS = \
+system_peer_CPPFLAGS = \
 	-w \
 	$(GOBJECT_CFLAGS) \
 	$(GEE_CFLAGS) \
@@ -117,7 +118,7 @@ here_i_am_CPPFLAGS = \
 	$(NTKDRPC_CFLAGS) \
 	$(NULL)
 
-here_i_am_LDADD = \
+system_peer_LDADD = \
 	$(GOBJECT_LIBS) \
 	$(GEE_LIBS) \
 	$(NTKDCOMMON_LIBS) \

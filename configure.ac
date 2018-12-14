@@ -33,5 +33,6 @@ PKG_CHECK_VAR([PTHTASKLET_VAPIDIR], [pth-tasklet], [vapidir])
 
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile])
+AC_CONFIG_LINKS([test_count_arcs:testsuites/scripts/test_count_arcs])
 AC_OUTPUT
 

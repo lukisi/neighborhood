@@ -1,0 +1,58 @@
+#!/bin/bash
+
+exit 0
+
+eth_domain   -i 123_eth0  -i 456_eth0  -i 789_eth0 &
+ETH_PID=$!
+radio_domain -i 123_wlan0 -o 456_wlan0 &
+RADIO1_PID=$!
+radio_domain -o 123_wlan0 -i 456_wlan0 -o 789_wlan0 &
+RADIO2_PID=$!
+radio_domain              -o 456_wlan0 -i 789_wlan0 &
+RADIO3_PID=$!
+sleep 0.3
+
+./system_peer -i eth0 -i wlan0 -p 123 &
+PEER_123_PID=$!
+sleep 0.3
+./system_peer -i eth0 -i wlan0 -p 456 &
+PEER_456_PID=$!
+sleep 0.3
+./system_peer -i eth0 -i wlan0 -p 789 &
+PEER_789_PID=$!
+sleep 0.3
+
+sleep 2
+
+# interrupt peer
+kill $PEER_123_PID
+# wait for peer and note down its retval
+wait $PEER_123_PID
+PEER_123_RET=$?
+
+sleep 2
+
+# interrupt peer
+kill $PEER_456_PID
+# wait for peer and note down its retval
+wait $PEER_456_PID
+PEER_456_RET=$?
+
+sleep 2
+
+# interrupt peer
+kill $PEER_789_PID
+# wait for peer and note down its retval
+wait $PEER_789_PID
+PEER_789_RET=$?
+
+# kill proxy demons
+kill $ETH_PID
+kill $RADIO1_PID
+kill $RADIO2_PID
+kill $RADIO3_PID
+
+# check testers retval
+test $PEER_123_RET -eq 0 || exit 1
+test $PEER_456_RET -eq 0 || exit 1
+test $PEER_789_RET -eq 0 || exit 1
