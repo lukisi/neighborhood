@@ -19,6 +19,7 @@ namespace TestHereiam
     void neighborhood_arc_added(INeighborhoodArc neighborhood_arc)
     {
         print(@"signal arc_added.\n");
+        if (do_count_arcs) arcs_count++;
     }
 
     void neighborhood_arc_changed(INeighborhoodArc neighborhood_arc)

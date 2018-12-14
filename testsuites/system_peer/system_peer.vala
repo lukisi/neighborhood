@@ -10,21 +10,27 @@ namespace TestHereiam
     [CCode (array_length = false, array_null_terminated = true)]
     string[] interfaces;
     int pid;
+    int check_count_arcs;
 
     ITasklet tasklet;
     NeighborhoodManager? neighborhood_mgr;
     SkeletonFactory skeleton_factory;
     StubFactory stub_factory;
+    bool do_count_arcs;
+    int arcs_count;
 
     HashMap<string,PseudoNetworkInterface> pseudonic_map;
 
     int main(string[] _args)
     {
+        pid = 0; // default
+        check_count_arcs = -1; // default
         OptionContext oc = new OptionContext("<options>");
-        OptionEntry[] entries = new OptionEntry[3];
+        OptionEntry[] entries = new OptionEntry[4];
         int index = 0;
         entries[index++] = {"pid", 'p', 0, OptionArg.INT, ref pid, "Fake PID (e.g. -p 1234).", null};
         entries[index++] = {"interfaces", 'i', 0, OptionArg.STRING_ARRAY, ref interfaces, "Interface (e.g. -i eth1). You can use it multiple times.", null};
+        entries[index++] = {"check-count-arcs", '\0', 0, OptionArg.INT, ref check_count_arcs, "Finally check that this number of arcs were been added.", null};
         entries[index++] = { null };
         oc.add_main_entries(entries, null);
         try {
@@ -34,6 +40,8 @@ namespace TestHereiam
             print(@"Error parsing options: $(e.message)\n");
             return 1;
         }
+        do_count_arcs = false; // default
+        arcs_count = 0; // default
 
         ArrayList<string> args = new ArrayList<string>.wrap(_args);
 
@@ -41,6 +49,10 @@ namespace TestHereiam
         // Names of the network interfaces to monitor.
         devs = new ArrayList<string>();
         foreach (string dev in interfaces) devs.add(dev);
+
+        if (pid == 0) error("Bad usage");
+        if (devs.is_empty) error("Bad usage");
+        if (check_count_arcs != -1) do_count_arcs = true;
 
         // Initialize tasklet system
         PthTaskletImplementer.init();
@@ -129,6 +141,10 @@ namespace TestHereiam
         tasklet.ms_wait(100);
 
         PthTaskletImplementer.kill();
+
+        //tests
+        if (check_count_arcs != -1 && check_count_arcs != arcs_count) error(@"Wrong number of arcs: $(arcs_count).");
+
         return 0;
     }
 

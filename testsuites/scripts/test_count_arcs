@@ -1,7 +1,5 @@
 #!/bin/bash
 
-exit 0
-
 eth_domain   -i 123_eth0  -i 456_eth0  -i 789_eth0 &
 ETH_PID=$!
 radio_domain -i 123_wlan0 -o 456_wlan0 &
@@ -12,13 +10,13 @@ radio_domain              -o 456_wlan0 -i 789_wlan0 &
 RADIO3_PID=$!
 sleep 0.3
 
-./system_peer -i eth0 -i wlan0 -p 123 &
+./system_peer -i eth0 -i wlan0 -p 123 --check-count-arcs 3 > test_count_arcs_123_out.txt 2>&1 &
 PEER_123_PID=$!
 sleep 0.3
-./system_peer -i eth0 -i wlan0 -p 456 &
+./system_peer -i eth0 -i wlan0 -p 456 --check-count-arcs 4 > test_count_arcs_456_out.txt 2>&1 &
 PEER_456_PID=$!
 sleep 0.3
-./system_peer -i eth0 -i wlan0 -p 789 &
+./system_peer -i eth0 -i wlan0 -p 789 --check-count-arcs 3 > test_count_arcs_789_out.txt 2>&1 &
 PEER_789_PID=$!
 sleep 0.3
 
@@ -54,5 +52,5 @@ kill $RADIO3_PID
 
 # check testers retval
 test $PEER_123_RET -eq 0 || exit 1
-test $PEER_456_RET -eq 0 || exit 1
-test $PEER_789_RET -eq 0 || exit 1
+test $PEER_456_RET -eq 0 || exit 2
+test $PEER_789_RET -eq 0 || exit 3
