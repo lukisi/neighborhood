@@ -3,7 +3,7 @@ using Netsukuku;
 using Netsukuku.Neighborhood;
 using TaskletSystem;
 
-namespace TestHereiam
+namespace SystemPeer
 {
     class NeighborhoodIPRouteManager : Object, INeighborhoodIPRouteManager
     {

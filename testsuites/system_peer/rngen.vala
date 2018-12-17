@@ -1,4 +1,4 @@
-namespace TestHereiam
+namespace SystemPeer
 {
     public interface IRandomNumberGenerator : Object
     {

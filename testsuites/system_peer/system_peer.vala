@@ -4,13 +4,15 @@ using Gee;
 using Netsukuku;
 using TaskletSystem;
 
-namespace TestHereiam
+namespace SystemPeer
 {
 
     [CCode (array_length = false, array_null_terminated = true)]
     string[] interfaces;
     int pid;
     int check_count_arcs;
+    bool check_remove_my_arc;
+    bool check_stop_monitor;
 
     ITasklet tasklet;
     NeighborhoodManager? neighborhood_mgr;
@@ -25,12 +27,16 @@ namespace TestHereiam
     {
         pid = 0; // default
         check_count_arcs = -1; // default
+        check_remove_my_arc = false; // default
+        check_stop_monitor = false; // default
         OptionContext oc = new OptionContext("<options>");
-        OptionEntry[] entries = new OptionEntry[4];
+        OptionEntry[] entries = new OptionEntry[6];
         int index = 0;
         entries[index++] = {"pid", 'p', 0, OptionArg.INT, ref pid, "Fake PID (e.g. -p 1234).", null};
         entries[index++] = {"interfaces", 'i', 0, OptionArg.STRING_ARRAY, ref interfaces, "Interface (e.g. -i eth1). You can use it multiple times.", null};
         entries[index++] = {"check-count-arcs", '\0', 0, OptionArg.INT, ref check_count_arcs, "Finally check that this number of arcs were been added.", null};
+        entries[index++] = {"check-remove-my-arc", '\0', 0, OptionArg.NONE, ref check_remove_my_arc, "After 2 secs, forcely remove one of my arcs.", null};
+        entries[index++] = {"check-stop-monitor", '\0', 0, OptionArg.NONE, ref check_stop_monitor, "After 3 secs, stop handling latest specified interface.", null};
         entries[index++] = { null };
         oc.add_main_entries(entries, null);
         try {
@@ -57,6 +63,9 @@ namespace TestHereiam
         // Initialize tasklet system
         PthTaskletImplementer.init();
         tasklet = PthTaskletImplementer.get_tasklet_system();
+
+        if (check_remove_my_arc) tasklet.spawn(new RemoveArcTasklet());
+        if (check_stop_monitor) tasklet.spawn(new StopMonitorTasklet(devs));
 
         // Initialize modules that have remotable methods (serializable classes need to be registered).
         NeighborhoodManager.init(tasklet);
@@ -126,7 +135,7 @@ namespace TestHereiam
         }
 
         // Call stop_monitor of NeighborhoodManager.
-        foreach (string dev in pseudonic_map.keys)
+        foreach (string dev in devs)
         {
             PseudoNetworkInterface pseudonic = pseudonic_map[dev];
             skeleton_factory.stop_stream_system_listen(pseudonic.st_listen_pathname);

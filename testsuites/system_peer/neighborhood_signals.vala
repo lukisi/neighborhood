@@ -3,7 +3,7 @@ using Netsukuku;
 using Netsukuku.Neighborhood;
 using TaskletSystem;
 
-namespace TestHereiam
+namespace SystemPeer
 {
     void neighborhood_nic_address_set(INeighborhoodNetworkInterface nic, string my_addr)
     {

@@ -1,7 +1,7 @@
 using Netsukuku;
 using Netsukuku.Neighborhood;
 
-namespace TestHereiam
+namespace SystemPeer
 {
     public class WholeNodeSourceID : Object, ISourceID
     {
