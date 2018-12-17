@@ -6,7 +6,7 @@ using TaskletSystem;
 
 namespace SystemPeer
 {
-    void remove_my_arc()
+    void do_check_remove_my_arc()
     {
         //
     }
@@ -16,7 +16,7 @@ namespace SystemPeer
         public void * func()
         {
             tasklet.ms_wait(2000);
-            remove_my_arc();
+            do_check_remove_my_arc();
             return null;
         }
     }

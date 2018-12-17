@@ -137,15 +137,8 @@ namespace SystemPeer
         }
 
         // Call stop_monitor of NeighborhoodManager.
-        foreach (string dev in devs)
-        {
-            PseudoNetworkInterface pseudonic = pseudonic_map[dev];
-            skeleton_factory.stop_stream_system_listen(pseudonic.st_listen_pathname);
-            print(@"stopped stream_system_listen $(pseudonic.st_listen_pathname).\n");
-            neighborhood_mgr.stop_monitor(dev);
-            skeleton_factory.stop_datagram_system_listen(pseudonic.listen_pathname);
-            print(@"stopped datagram_system_listen $(pseudonic.listen_pathname).\n");
-        }
+        foreach (string dev in devs) stop_monitor(dev);
+        devs.clear();
 
         // Then we destroy the object NeighborhoodManager.
         neighborhood_mgr = null;
@@ -164,6 +157,16 @@ namespace SystemPeer
     {
         // We got here because of a signal. Quick processing.
         do_me_exit = true;
+    }
+
+    void stop_monitor(string dev)
+    {
+        PseudoNetworkInterface pseudonic = pseudonic_map[dev];
+        skeleton_factory.stop_stream_system_listen(pseudonic.st_listen_pathname);
+        print(@"stopped stream_system_listen $(pseudonic.st_listen_pathname).\n");
+        neighborhood_mgr.stop_monitor(dev);
+        skeleton_factory.stop_datagram_system_listen(pseudonic.listen_pathname);
+        print(@"stopped datagram_system_listen $(pseudonic.listen_pathname).\n");
     }
 
     class PseudoNetworkInterface : Object
