@@ -1,0 +1,51 @@
+#!/bin/bash
+
+eth_domain -i 1_eth0  -i 2_eth0  -i 3_eth0 &
+ETH0_PID=$!
+eth_domain -i 1_eth1  -i 2_eth1  -i 3_eth1 &
+ETH1_PID=$!
+sleep 0.3
+
+# --check-count-arcs 3
+./system_peer -i eth0 -i eth1 -p 1 --check-stop-monitor --check-count-arcs 3 > test_stop_monitor_1_out.txt 2>&1 &
+PEER_1_PID=$!
+sleep 0.3
+./system_peer -i eth0 -i eth1 -p 2 --check-count-arcs 4 > test_stop_monitor_2_out.txt 2>&1 &
+PEER_2_PID=$!
+sleep 3.5
+./system_peer -i eth0 -i eth1 -p 3 --check-count-arcs 3 > test_stop_monitor_3_out.txt 2>&1 &
+PEER_3_PID=$!
+sleep 0.3
+
+sleep 2
+
+# interrupt peer
+kill $PEER_1_PID
+# wait for peer and note down its retval
+wait $PEER_1_PID
+PEER_1_RET=$?
+
+sleep 2
+
+# interrupt peer
+kill $PEER_2_PID
+# wait for peer and note down its retval
+wait $PEER_2_PID
+PEER_2_RET=$?
+
+sleep 2
+
+# interrupt peer
+kill $PEER_3_PID
+# wait for peer and note down its retval
+wait $PEER_3_PID
+PEER_3_RET=$?
+
+# kill proxy demons
+kill $ETH0_PID
+kill $ETH1_PID
+
+# check testers retval
+test $PEER_1_RET -eq 0 || exit 1
+test $PEER_2_RET -eq 0 || exit 2
+test $PEER_3_RET -eq 0 || exit 3

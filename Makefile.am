@@ -15,6 +15,7 @@ TESTS = \
 	test_count_arcs \
 	test_collision \
 	test_no_self_arc \
+	test_stop_monitor \
 	$(NULL)
 
 libneighborhood_la_SOURCES = \
