@@ -9,22 +9,26 @@ namespace SystemPeer
     {
         public void add_address(string my_addr, string my_dev)
         {
-            print(@"NeighborhoodIPRouteManager.add_address($my_addr, $my_dev)\n");
+            cm.single_command(new ArrayList<string>.wrap({
+                @"ip", @"address", @"add", @"$(my_addr)", @"dev", @"$(my_dev)"}));
         }
 
         public void add_neighbor(string my_addr, string my_dev, string neighbor_addr)
         {
-            print(@"NeighborhoodIPRouteManager.add_neighbor($my_addr, $my_dev, $neighbor_addr)\n");
+            cm.single_command(new ArrayList<string>.wrap({
+                @"ip", @"route", @"add", @"$(neighbor_addr)", @"dev", @"$(my_dev)", @"src", @"$(my_addr)"}));
         }
 
         public void remove_neighbor(string my_addr, string my_dev, string neighbor_addr)
         {
-            print(@"NeighborhoodIPRouteManager.remove_neighbor($my_addr, $my_dev, $neighbor_addr)\n");
+            cm.single_command(new ArrayList<string>.wrap({
+                @"ip", @"route", @"del", @"$(neighbor_addr)", @"dev", @"$(my_dev)", @"src", @"$(my_addr)"}));
         }
 
         public void remove_address(string my_addr, string my_dev)
         {
-            print(@"NeighborhoodIPRouteManager.remove_address($my_addr, $my_dev)\n");
+            cm.single_command(new ArrayList<string>.wrap({
+                @"ip", @"address", @"del", @"$(my_addr)/32", @"dev", @"$(my_dev)"}));
         }
     }
 
@@ -113,6 +117,8 @@ namespace SystemPeer
 
         public long measure_rtt(string peer_addr, string peer_mac, string my_dev, string my_addr) throws NeighborhoodGetRttError
         {
+            cm.single_command(new ArrayList<string>.wrap({
+                "ping", "-n", "-q", "-c", "1", @"$(peer_addr)"}));
             return 1000;
             // TODO
         }

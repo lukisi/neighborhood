@@ -15,6 +15,7 @@ namespace SystemPeer
     bool check_stop_monitor;
 
     ITasklet tasklet;
+    FakeCommandDispatcher cm;
     NeighborhoodManager? neighborhood_mgr;
     SkeletonFactory skeleton_factory;
     StubFactory stub_factory;
@@ -63,6 +64,7 @@ namespace SystemPeer
         // Initialize tasklet system
         PthTaskletImplementer.init();
         tasklet = PthTaskletImplementer.get_tasklet_system();
+        cm = new FakeCommandDispatcher();
 
         if (check_remove_my_arc) tasklet.spawn(new RemoveArcTasklet());
         if (check_stop_monitor) tasklet.spawn(new StopMonitorTasklet(devs));

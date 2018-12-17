@@ -96,6 +96,7 @@ system_peer_SOURCES =  \
 	testsuites/system_peer/rpc/module_stubs.vala \
 	testsuites/system_peer/check_remove_my_arc.vala \
 	testsuites/system_peer/check_stop_monitor.vala \
+	testsuites/system_peer/fake_command_dispatcher.vala \
 	neighborhood.vapi \
 	$(NULL)
 
