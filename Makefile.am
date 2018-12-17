@@ -14,6 +14,7 @@ TESTS = \
 	test_serializables \
 	test_count_arcs \
 	test_collision \
+	test_no_self_arc \
 	$(NULL)
 
 libneighborhood_la_SOURCES = \

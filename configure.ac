@@ -35,5 +35,6 @@ AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile])
 AC_CONFIG_LINKS([test_count_arcs:testsuites/scripts/test_count_arcs])
 AC_CONFIG_LINKS([test_collision:testsuites/scripts/test_collision])
+AC_CONFIG_LINKS([test_no_self_arc:testsuites/scripts/test_no_self_arc])
 AC_OUTPUT
 

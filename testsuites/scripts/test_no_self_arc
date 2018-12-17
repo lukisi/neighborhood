@@ -1,0 +1,23 @@
+#!/bin/bash
+
+eth_domain -i 345_eth0 -i 345_eth1 &
+ETH_PID=$!
+sleep 0.3
+
+./system_peer -i eth0 -i eth1 -p 345 --check-count-arcs 0 > test_no_self_arc_345_out.txt 2>&1 &
+PEER_345_PID=$!
+sleep 0.3
+
+sleep 2
+
+# interrupt peer
+kill $PEER_345_PID
+# wait for peer and note down its retval
+wait $PEER_345_PID
+PEER_345_RET=$?
+
+# kill proxy demons
+kill $ETH_PID
+
+# check testers retval
+test $PEER_345_RET -eq 0 || exit 1
