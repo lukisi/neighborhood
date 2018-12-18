@@ -28,7 +28,6 @@ namespace Netsukuku.Neighborhood
         {
             // Register serializable types internal to the module.
             typeof(NeighborhoodNodeID).class_peek();
-            typeof(NodeID).class_peek();
             tasklet = _tasklet;
         }
 
