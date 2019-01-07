@@ -78,12 +78,8 @@ namespace SystemPeer
         typeof(NeighbourSrcNic).class_peek();
 
         // Initialize pseudo-random number generators.
-        uint32 seed_prn = 0;
-        if (devs.size > 0)
-        {
-            string _seed = @"$(pid)_$(devs[0])";
-            seed_prn = (uint32)_seed.hash();
-        }
+        string _seed = @"$(pid)";
+        uint32 seed_prn = (uint32)_seed.hash();
         PRNGen.init_rngen(null, seed_prn);
         NeighborhoodManager.init_rngen(null, seed_prn);
 
