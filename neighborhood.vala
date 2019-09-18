@@ -49,6 +49,7 @@ namespace Netsukuku.Neighborhood
             this.query_caller_info = query_caller_info;
             this.ip_mgr = ip_mgr;
             nics = new HashMap<string, INeighborhoodNetworkInterface>();
+            disabling_nics = new ArrayList<string>();
             local_addresses = new HashMap<string, string>();
             monitoring_devs = new HashMap<string, ITaskletHandle>();
             arcs_grandtotal = new ArrayList<NeighborhoodRealArc>();
@@ -69,6 +70,7 @@ namespace Netsukuku.Neighborhood
         private INeighborhoodQueryCallerInfo query_caller_info;
         private INeighborhoodIPRouteManager ip_mgr;
         private HashMap<string, INeighborhoodNetworkInterface> nics;
+        private ArrayList<string> disabling_nics;
         private HashMap<string, string> local_addresses;
         private HashMap<string, ITaskletHandle> monitoring_devs;
         private ArrayList<NeighborhoodRealArc> arcs_grandtotal;
@@ -137,6 +139,8 @@ namespace Netsukuku.Neighborhood
             if (! nics.has_key(dev)) return;
             // nic found
             INeighborhoodNetworkInterface nic = nics[dev];
+            // disable new arcs from this nic
+            disabling_nics.add(dev);
             // remove arcs on this nic
             ArrayList<NeighborhoodRealArc> todel = new ArrayList<NeighborhoodRealArc>();
             foreach (NeighborhoodRealArc arc in arcs_grandtotal) if (arc.nic == nic) todel.add(arc);
@@ -154,6 +158,7 @@ namespace Netsukuku.Neighborhood
             monitoring_devs.unset(dev);
             nics.unset(dev);
             local_addresses.unset(dev);
+            disabling_nics.remove(dev);
         }
 
         /* Runs in a tasklet foreach device
@@ -369,6 +374,8 @@ namespace Netsukuku.Neighborhood
             // It's a neighbour. The message came through my_nic. The MAC of the peer is its_mac.
             string my_dev = my_nic.dev;
             string my_addr = local_addresses[my_dev];
+            // If nic is going to be disabled, ignore the message.
+            if (my_dev in disabling_nics) return;
 
             string its_id_id = @"$(its_id.id)";
             if (! arcs_by_itsmac.has_key(its_mac))
