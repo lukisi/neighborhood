@@ -450,6 +450,8 @@ namespace Netsukuku.Neighborhood
             // It's a neighbour. The message came through my_nic. The MAC of the peer is its_mac.
             string my_dev = my_nic.dev;
             string my_addr = local_addresses[my_dev];
+            // If nic is going to be disabled, ignore the message.
+            if (my_dev in disabling_nics) return;
 
             // is message for me?
             if (dest_id.id != my_id.id) return;
@@ -486,19 +488,27 @@ namespace Netsukuku.Neighborhood
             if (find_arc_in_list(arcs_by_itsnodeid[its_id_id], (a) => a.nic.dev == my_dev && a.neighbour_mac != its_mac) != -1)
                 return; // ignore call. I already have an arc with my_dev towards another NIC of same neighbor.
 
-            if (find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev == my_dev) != -1)
-                return; // ignore call. I already have the arc that this message would add.
-
-            // Let's make an arc
-            NeighborhoodRealArc new_arc = new NeighborhoodRealArc(its_id, its_mac, its_nic_addr, my_nic);
-            arcs_by_itsmac[its_mac].add(new_arc);
-            arcs_by_itsll[its_nic_addr].add(new_arc);
-            arcs_by_itsnodeid[its_id_id].add(new_arc);
-            arcs_by_mydev_itsmac[my_dev][its_mac].add(new_arc);
-            arcs_by_mydev_itsll[my_dev][its_nic_addr].add(new_arc);
-            arcs_by_mydev_itsnodeid[my_dev][its_id_id].add(new_arc);
-            arcs_grandtotal.add(new_arc);
-            ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
+            NeighborhoodRealArc new_arc;
+            int index = find_arc_in_list(arcs_by_itsmac[its_mac], (a) => a.nic.dev == my_dev);
+            if (index != -1)
+            {
+                // Retrieve arc
+                new_arc = arcs_by_itsmac[its_mac][index];
+                if (new_arc.exported) return; // ignore call. I already have the arc that this message would add.
+            }
+            else
+            {
+                // Let's make an arc
+                new_arc = new NeighborhoodRealArc(its_id, its_mac, its_nic_addr, my_nic);
+                arcs_by_itsmac[its_mac].add(new_arc);
+                arcs_by_itsll[its_nic_addr].add(new_arc);
+                arcs_by_itsnodeid[its_id_id].add(new_arc);
+                arcs_by_mydev_itsmac[my_dev][its_mac].add(new_arc);
+                arcs_by_mydev_itsll[my_dev][its_nic_addr].add(new_arc);
+                arcs_by_mydev_itsnodeid[my_dev][its_id_id].add(new_arc);
+                arcs_grandtotal.add(new_arc);
+                ip_mgr.add_neighbor(my_addr, my_dev, its_nic_addr);
+            }
 
             // can I export?
             bool can_i = exported_arcs.size < max_arcs;
